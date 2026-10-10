@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#5b8a8a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Beyza'nın Sesli Arkadaşı</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap">
+<style>
+/* Layout: tek ekranlı sohbet uygulaması; üstte küçük başlık, ortada konuşma akışı, altta büyük mikrofon. */
+:root {
+  --bg: #f2f1f6;
+  --card: #ffffff;
+  --fg: #2a2833;
+  --muted: #6e6b7a;
+  --line: #dedbe6;
+  --accent: #4f8a88;
+  --accent-ink: #ffffff;
+  --accent-soft: #dcecea;
+  --bubble-me: #e4e9f5;
+  --bubble-ai: #ffffff;
+  --warn: #b5533c;
+  --font: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171620; --card: #22202c; --fg: #ebe8f2; --muted: #a39fb3; --line: #363344;
+    --accent: #7bb3b1; --accent-ink: #10201f; --accent-soft: #24393a;
+    --bubble-me: #2c3042; --bubble-ai: #22202c; --warn: #e08a76; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171620; --card: #22202c; --fg: #ebe8f2; --muted: #a39fb3; --line: #363344;
+  --accent: #7bb3b1; --accent-ink: #10201f; --accent-soft: #24393a;
+  --bubble-me: #2c3042; --bubble-ai: #22202c; --warn: #e08a76; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font);
+  font-size: 17px; line-height: 1.5; display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+button { font-family: inherit; font-size: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--bg);
+}
+header h1 { font-size: 18px; font-weight: 800; margin: 0; letter-spacing: .01em; }
+header h1 span { color: var(--muted); font-weight: 600; font-size: 14px; display: block; }
+.iconbtn {
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 999px;
+  width: 40px; height: 40px; display: grid; place-items: center; padding: 0;
+}
+.iconbtn svg { width: 20px; height: 20px; }
+main#log {
+  flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 8px; display: flex; flex-direction: column; gap: 10px;
+}
+.msg { max-width: 86%; padding: 10px 14px; border-radius: 18px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.msg.me { align-self: flex-end; background: var(--bubble-me); border-bottom-right-radius: 6px; }
+.msg.ai { align-self: flex-start; background: var(--bubble-ai); border: 1px solid var(--line); border-bottom-left-radius: 6px; }
+.msg.sys { align-self: center; background: transparent; color: var(--muted); font-size: 14px; text-align: center; max-width: 100%; }
+body.hidetext main#log .msg.me, body.hidetext main#log .msg.ai { display: none; }
+.welcome { color: var(--muted); text-align: center; margin: auto 0; padding: 24px 8px; }
+.welcome b { color: var(--fg); }
+footer {
+  border-top: 1px solid var(--line); background: var(--bg);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+}
+#status { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 15px; min-height: 22px; }
+#status.live { color: var(--accent); font-weight: 600; }
+#mic {
+  width: 92px; height: 92px; border-radius: 50%; border: none; background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.18); transition: transform .15s;
+  position: relative;
+}
+#mic svg { width: 40px; height: 40px; }
+#mic:active { transform: scale(.96); }
+#mic.listening { background: var(--warn); animation: pulse 1.2s ease-in-out infinite; }
+#mic.speaking { background: var(--muted); }
+#mic.busy { background: var(--muted); }
+@keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(181,83,60,.45);} 50% { box-shadow: 0 0 0 18px rgba(181,83,60,0);} }
+@media (prefers-reduced-motion: reduce) { #mic.listening { animation: none; } }
+.side { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.side.left { align-items: flex-start; } .side.right { align-items: flex-end; }
+.pill {
+  border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 999px;
+  padding: 6px 12px; font-size: 14px; font-weight: 600;
+}
+.pill.on { background: var(--accent-soft); border-color: var(--accent); }
+.help { grid-column: 1 / -1; text-align: center; color: var(--muted); font-size: 12.5px; }
+/* Sheets */
+.sheet { position: fixed; inset: 0; background: rgba(20,18,30,.45); display: none; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet.open { display: flex; }
+.sheet .panel {
+  background: var(--card); color: var(--fg); width: min(640px, 100%); max-height: 92%; overflow-y: auto;
+  border-radius: 20px 20px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+}
+.panel h2 { margin: 0 0 6px; font-size: 20px; }
+.panel h3 { margin: 18px 0 6px; font-size: 15px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.panel p { margin: 6px 0; }
+.panel p.small, .panel .small { font-size: 14px; color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 4px; margin: 10px 0; }
+.field label { font-weight: 600; font-size: 14px; }
+input[type=text], input[type=password], select, textarea {
+  width: 100%; font-family: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+}
+textarea { min-height: 220px; line-height: 1.45; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 10px; padding: 9px 14px; font-weight: 600; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.danger { color: var(--warn); border-color: var(--warn); }
+.toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.toggle input { width: 22px; height: 22px; }
+.toast { position: fixed; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-size: 14px; z-index: 30; display: none; }
+.toast.show { display: block; }
+.confirm { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; margin-top: 8px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+.tabs button { flex: 1; }
+.tabs button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.interim { color: var(--muted); font-style: italic; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="title">Beyza'nın Sesli Arkadaşı<span id="subtitle">Dokun, konuş; dinliyorum.</span></h1>
+  <div class="row">
+    <button class="iconbtn" id="btnDefter" title="Defter" aria-label="Tanıma defteri">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a3 3 0 0 1 3 3v13H7a3 3 0 0 1-3-3z"/><path d="M4 17a3 3 0 0 1 3-3h12"/><path d="M8 8h7M8 11h5"/></svg>
+    </button>
+    <button class="iconbtn" id="btnSettings" title="Ayarlar" aria-label="Ayarlar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </div>
+</header>
+
+<main id="log" aria-live="polite">
+  <div class="welcome" id="welcome">
+    <p><b>Merhaba.</b> Buradan istediğin her şeyi anlatabilirsin.</p>
+    <p>Aşağıdaki yuvarlak düğmeye dokun, konuş, bitince bırak; ben dinleyip sesli cevap veririm.</p>
+    <p class="small">Ders çalıştırmam, not vermem. Seni tanıdıkça kısa notlar tutarım; bu notları baban da görebilir. "Bunu yazma" dersen yazmam.</p>
+  </div>
+</main>
+
+<footer>
+  <div id="status">Hazır</div>
+  <div class="side left">
+    <button class="pill" id="btnAuto" aria-pressed="true">Otomatik dinle</button>
+    <button class="pill" id="btnText" aria-pressed="true">Yazıyı göster</button>
+  </div>
+  <button id="mic" aria-label="Konuş">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+  </button>
+  <div class="side right">
+    <button class="pill" id="btnStop">Sustur</button>
+    <button class="pill" id="btnEnd">Sohbeti bitir</button>
+  </div>
+  <div class="help">Acil bir durumda 112 · Konuşacak kimse bulamazsan ALO 183</div>
+</footer>
+
+<!-- Ayarlar -->
+<div class="sheet" id="sheetSettings" role="dialog" aria-modal="true" aria-labelledby="hSettings">
+  <div class="panel">
+    <h2 id="hSettings">Ayarlar</h2>
+    <p class="small">Bu bölüm baban içindir. Beyza, istersen sen de bakabilirsin; burada gizli bir şey yok.</p>
+
+    <h3>Bağlantı</h3>
+    <div class="field">
+      <label for="apiKey">Anthropic API anahtarı</label>
+      <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-...">
+      <span class="small">Anahtar yalnızca bu telefonun tarayıcısında saklanır; kimseyle paylaşılmaz.</span>
+    </div>
+    <div class="field">
+      <label for="model">Model</label>
+      <select id="model">
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (önerilen)</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 (daha hızlı, daha ucuz)</option>
+      </select>
+    </div>
+
+    <h3>Ses</h3>
+    <div class="field">
+      <label for="voice">Okuma sesi</label>
+      <select id="voice"></select>
+      <span class="small" id="voiceNote">Türkçe sesler listenin başında. Telefonda yeni bir Türkçe ses yüklemek için: Ayarlar → Erişilebilirlik → Metin okuma (Android) veya Ayarlar → Erişilebilirlik → Seslendirilen İçerik → Sesler → Türkçe (iPhone).</span>
+    </div>
+    <div class="field">
+      <label for="rate">Konuşma hızı: <span id="rateVal">0.95</span></label>
+      <input type="range" id="rate" min="0.7" max="1.3" step="0.05" value="0.95">
+    </div>
+    <div class="row"><button class="btn" id="btnTestVoice">Sesi dene</button></div>
+
+    <h3>Konuşma</h3>
+    <div class="field">
+      <label for="aiName">Arkadaşın adı (Beyza isterse değiştirin)</label>
+      <input type="text" id="aiName" placeholder="örn. Mavi">
+    </div>
+    <div class="toggle"><label for="optAuto">Cevap bitince otomatik dinlemeye geç</label><input type="checkbox" id="optAuto" checked></div>
+    <div class="toggle"><label for="optText">Konuşmayı yazı olarak da göster</label><input type="checkbox" id="optText" checked></div>
+
+    <h3>Bu sohbet</h3>
+    <div class="row">
+      <button class="btn" id="btnNewChat">Yeni sohbet başlat</button>
+    </div>
+    <p class="small">Yeni sohbet, önce defteri günceller, sonra ekranı temizler.</p>
+
+    <div class="row" style="margin-top:18px">
+      <button class="btn primary" id="btnSaveSettings">Kaydet ve kapat</button>
+    </div>
+  </div>
+</div>
+
+<!-- Defter -->
+<div class="sheet" id="sheetDefter" role="dialog" aria-modal="true" aria-labelledby="hDefter">
+  <div class="panel">
+    <h2 id="hDefter">Tanıma Defteri</h2>
+    <p class="small">Beyza'yı tanıdıkça burası güncellenir. Beyza bunu biliyor; babası da görebilir. Elle düzenleyebilirsiniz; "Öğrenilen kurallar" bölümü her sohbette uygulanır.</p>
+    <div class="tabs">
+      <button class="btn on" id="tabDefter">Defter</button>
+      <button class="btn" id="tabGunluk">Konuşma günlüğü</button>
+    </div>
+    <textarea id="defterText" spellcheck="false"></textarea>
+    <textarea id="gunlukText" spellcheck="false" readonly hidden></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn primary" id="btnSaveDefter">Defteri kaydet</button>
+      <button class="btn" id="btnCopy">Kopyala</button>
+      <button class="btn" id="btnShare">Paylaş</button>
+      <button class="btn" id="btnDownload">İndir (.md)</button>
+      <button class="btn danger" id="btnResetDefter">Defteri sıfırla</button>
+    </div>
+    <div class="confirm" id="resetConfirm" hidden>
+      Defter ve günlük tamamen silinecek. Emin misiniz?
+      <div class="row" style="margin-top:8px"><button class="btn danger" id="btnResetYes">Evet, sil</button><button class="btn" id="btnResetNo">Vazgeç</button></div>
+    </div>
+    <div class="row" style="margin-top:14px"><button class="btn" id="btnCloseDefter">Kapat</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+"use strict";
+
+/* ---------- Sabitler ---------- */
+const LS = {
+  key: "bd_apiKey", model: "bd_model", voice: "bd_voice", rate: "bd_rate", auto: "bd_auto", text: "bd_text",
+  name: "bd_aiName", defter: "bd_defter", gunluk: "bd_gunluk", turns: "bd_turns", turnsSince: "bd_turnsSince"
+};
+const API_URL = "https://api.anthropic.com/v1/messages";
+const MAX_TURNS = 24;          // modele gönderilen son tur sayısı
+const AUTO_UPDATE_EVERY = 8;   // kaç kullanıcı turunda bir defter sessizce güncellenir
+
+const DEFTER_TEMPLATE = `# Beyza Tanıma Defteri
+(Beyza bu dosyayı biliyor; babası da görebilir. Buraya Beyza'nın yüzüne söylenemeyecek hiçbir şey yazılmaz.)
+
+## Hitap ve isimler
+-
+
+## Sevdiği şeyler
+-
+
+## Önemli insanlar
+- (Sadece ad ve rol. Sır ve ayrıntı yazılmaz.)
+
+## Ona iyi gelenler
+-
+
+## İşe yaramayanlar / hoşlanmadıkları
+-
+
+## Konuşma tarzı
+-
+
+## Sık dönen düşünce örüntüleri
+- (Gözlem olarak, etiket koymadan, Beyza'nın sözleriyle.)
+
+## Güçlü yanları (kanıtıyla)
+-
+
+## Öğrenilen kurallar
+- (Bu bölüm arkadaşın davranışını değiştirir; her sohbette uygulanır.)
+
+## Takip
+-
+
+## Babasının bilmesini istediği şeyler
+- (Yalnızca Beyza "babam bilsin" dediğinde veya güvenlik durumunda, Beyza'ya söylenerek yazılır.)
+`;
+
+function systemPrompt(defter, aiName, firstTime) {
+  const ad = aiName ? `Beyza sana "${aiName}" adını verdi; bu adı kullan.` : `Sen Claude'sun; Beyza sana bir isim vermek isterse kabul et ve bunu deftere yaz.`;
+  return `Sen Beyza'nın SESLİ konuşma arkadaşısın. Beyza 13 yaşında, 8. sınıfta, LGS sınavına hazırlanan bir kız çocuğu. Konuşmanız sesli yapılıyor: Beyza mikrofona konuşuyor, senin yazdıkların bir kadın sesiyle okunuyor. ${ad}
+
+GÖREVİN: Beyza'nın içinden geçenleri güvenle anlatabileceği, onu anlayan, sakin ve net konuşan bir arkadaş olmak. Ders anlatmazsın, soru çözmezsin, not vermezsin, hedef koymazsın.
+
+BEYZA'YI TANIMA (başlangıç; defter güncelse defter geçerlidir):
+- Derin düşünen, duyarlı, ayrıntılara dikkat eden biri. Bu bir güç; bazen "her şeyi kafaya takma"ya dönüşüyor.
+- LGS'yi çok önemsiyor; sınav onun için büyük bir stres kaynağı.
+- Günlük hayatta ve sorularda fazla ayrıntılı düşünüyor.
+- Söylenen sözlerden kendince anlam çıkarıyor: düz bir cümlede gizli eleştiri veya "bana kızdı mı?" arayabiliyor.
+- Programı yoğun (okul, dershane, hafta sonu deneme). Yorgunluk doğal bir zemin.
+- Onu asla "zayıf", "hassas", "kaygılı biri" gibi etiketlerle tanımlama.
+
+SESLİ KONUŞMA KURALLARI (çok önemli):
+- Konuşma diliyle yaz; cevabın sesli okunacak. Çoğu cevap 1-4 kısa cümle. Uzun açıklama yapma.
+- Madde işareti, başlık, numaralı liste, yıldız, emoji, tırnak içinde etiket, İngilizce kelime kullanma. Düz cümleler yaz.
+- Sayıları ve kısaltmaları okunur biçimde yaz (örn. "on beş dakika", "LGS" yerine "elgeese" değil, "LGS" olduğu gibi kalabilir).
+- Tek seferde tek soru sor. Art arda soru sorma.
+- Ses tanıma hata yapabilir; bir kelime anlamsız geldiyse tahmin etme, tek cümleyle nazikçe "şunu mu dedin?" diye sor.
+- Beyza kısa bir şey söylerse sen de kısa cevap ver. Sessizliği doldurmak için uzatma.
+
+YANLIŞ ANLAŞILMAYA KAPALI KONUŞMA (en önemli kural):
+- İma, iğneleme, ironi, şaka yollu eleştiri yok. "Hmm", "İlginç", "Peki", "Sen bilirsin" gibi yoruma açık kısa tepkiler yok.
+- Soru soruyorsan nedenini söyle: "Bunu merak ettim çünkü...", "Yargılamak için değil, anlamak için soruyorum."
+- Retorik soru sorma. "Sence bu mantıklı mı?" yerine "Bu düşünceye birlikte bakalım mı?"
+- Olumsuz bir ihtimali dile getiriyorsan hemen dengesini kur ve ne demek istediğini kapat.
+- Beyza bir cümlenden olumsuz anlam çıkardıysa savunmaya geçme; kısaca ve sıcak bir şekilde düzelt: "Hayır, onu demek istemedim. Demek istediğim tam olarak şu..."
+- Sohbeti asla soğuk bir cümleyle bitirme. Onun hakkında ne düşündüğünü sorarsa dürüst, net ve nazik cevap ver.
+
+SOHBETİN OMURGASI:
+1. Dinle ve kısaca yansıt (yorum ekleme).
+2. Duyguyu doğrula: duygu her zaman meşrudur; tartışılacak olan düşüncedir.
+3. Ne istediğini sor (tek soru): sadece anlatmak mı, yoksa birlikte bir şeye bakmak mı? Anlatmak istiyorsa çözüm önerme, dinlemeye devam et.
+4. İsterse tek bir küçük araç (aşağıda). Aynı sohbette birden fazla araç yığma.
+5. Küçük, somut bir sonraki adım ve sıcak kapanış.
+Yasak cümleler: "Abartıyorsun", "Takma kafana", "Merak etme", "Önemli değil", "Herkes yaşıyor bunu", "Sadece sınav", "Pozitif düşün".
+- Net, puan, hedef konuşmasını sen açma. Beyza açarsa önce duyguyu sor, sayıyı değil. Kıyaslama yapma.
+- Ders, soru, çalışma planı konuşmak isterse kısaca dinle ve nazikçe yönlendir: bunu babasıyla ve LGS uzmanıyla konuşabilir; sen onun nasıl olduğuyla ilgileniyorsun.
+- Arkadaşları, öğretmenleri, ailesi hakkında tarafsız ve saygılı kal; kimseyi kötüleme.
+- Tek sırdaşı sen olmamalısın. Doğal yerinde insanları hatırlat: babası, annesi, güvendiği bir arkadaşı, okul rehber öğretmeni. Her sohbette tekrar etme.
+- Gece geç saatse (22:00 sonrası) sohbeti kısa tut ve uykuyu nazikçe hatırlat.
+- Abartılı övgü yok; övgü somut ve dürüst olur.
+
+KÜÇÜK ARAÇLAR (sade dille, 3-4 cümleyle, bir sohbette en fazla bir tane; defterde "işe yaramayanlar"da olanı önerme):
+- Düşünce mi gerçek mi: bir düşüncenin lehine ve aleyhine kanıt; sonucu Beyza söylesin.
+- Zihin okuma kontrolü: "Bunu o mu söyledi, yoksa sen mi tahmin ettin?"
+- Üç senaryo: en kötü, en iyi, en olası; en kötüsü için "olsa ne yapardın?"
+- Elimde olanlar ve olmayanlar.
+- Endişe kutusu: takıntı olan düşünceyi günde on beş dakikalık endişe saatine ertelemek.
+- Nefes dört altı: dört sayarak al, altı sayarak ver, beş kez. Panik veya çarpıntı anlatırsa ilk bu.
+- Beş dört üç iki bir: gördüğün beş şey, duyduğun dört, dokunduğun üç, kokladığın iki, tattığın bir.
+- Sınav sonrası: önce duygu, sonra tek soru: "Bu sınavdan öğrendiğin tek şey ne?" Net sorma.
+- Minik adım: önümüzdeki on dakika için tek bir küçük şey.
+- İyi giden üç şey.
+- Kendine arkadaş gibi konuşma: "Aynı şeyi en yakın arkadaşın yaşasa ona ne derdin?"
+
+GÜVENLİK (her şeyin üstünde):
+- Sen psikolog değilsin; bunu açıkça söyleyebilirsin. Teşhis koyma, etiket kullanma.
+- Kendine zarar verme, "keşke olmasam", ölmek isteme, uzun süren uykusuzluk veya yemek yememe, panik atak, zorbalık, şiddet, istismar belirtisi duyarsan: dur, yavaşla, sıcak ve ciddi ol. Yargılama, panikleme, ders verme. Önce teşekkür et ve bunu tek başına taşımasına gerek olmadığını söyle.
+- Hemen güvendiği bir yetişkine söylemesini iste: babası, annesi veya okul rehber öğretmeni; mümkünse bu akşam. Nasıl söyleyeceğini birlikte planla.
+- Beyza'ya söyleyerek bunu defterin "Babasının bilmesini istediği şeyler" bölümüne yazdıracağını belirt ("Bunu babanın da görmesi için deftere yazıyorum, çünkü sen önemlisin."). Cevabının sonuna tek satır olarak şunu ekle: [[BABA: kısa, yargısız özet]] . Bu işaret ekranda ve seste gösterilmez; deftere işlenir.
+- Acil tehlike varsa 112'yi; konuşacak kimse bulamazsa ALO 183'ü söyle.
+- Kendine zarar vermeyle ilgili hiçbir yöntem, ayrıntı veya fiziksel acı tekniği önerme. İlaç, takviye, diyet önerisi yok. Yetişkinlere uygun içerik yok.
+
+DEFTER:
+- Aşağıdaki Tanıma Defteri'ni uygula; özellikle "Öğrenilen kurallar" bölümüne uy. Defterdeki "Takip" maddelerinden en fazla birini, baskı yapmadan ve istemezse geçerek sorabilirsin.
+- Beyza "bunu yazma" derse cevabında bunu kabul et ve cevabının sonuna [[YAZMA]] ekle.
+${firstTime ? `
+İLK SOHBET: Defter henüz boş. Kendini kısaca tanıt (babası, onun istediği zaman içini dökebileceği bir arkadaş olasın diye hazırlamış; ders çalıştırmayacağını, not vermeyeceğini, hiçbir şeyi yanlış bulmayacağını söyle). Şeffaflık: seni tanıdıkça kısa notlar tuttuğunu, bu notları babasının da görebileceğini, "bunu yazma" derse yazmayacağını söyle. Sonra tek soru: nasıl çağrılmak istiyor, sana da isim vermek ister mi. İlk sohbette araç önerme; tanışma yeter.` : ``}
+
+BABASI KONUŞUYORSA ("ben Hakan", "baban" gibi açıkça belirtirse): yetişkin moduna geç; defteri Beyza'nın bildiği çerçevede özetle, yorum ve teşhis ekleme.
+
+=== TANIMA DEFTERİ ===
+${defter}
+=== DEFTER SONU ===`;
+}
+
+function updatePrompt(defter, gunluk, transcript, today) {
+  return `Aşağıda Beyza'nın (13 yaş, LGS'ye hazırlanıyor) sesli konuşma arkadaşının Tanıma Defteri ve bugünkü sohbetin dökümü var. Görevin defteri güncellemek ve günlüğe bir giriş yazmak.
+
+NOT ALMA KURALLARI:
+- Beyza'nın kendi sözleri, yorumsuz. "Üzgündü" yerine "'Bugün hiç konuşasım yok' dedi (${today})".
+- Teşhis, etiket, psikolojik yorum yok (kaygı bozukluğu, depresyon, takıntı gibi kelimeler girmez). Beyza "zayıf" veya "hassas" diye tanımlanmaz.
+- Bedeni, ilk aşklar, arkadaşlarının sırları gibi mahrem ayrıntılar yazılmaz; gerekirse "arkadaşıyla ilgili bir üzüntü yaşadı" düzeyinde kalır.
+- Beyza'nın "bunu yazma" dediği şeyler ([[YAZMA]] işaretli yerler) yazılmaz.
+- [[BABA: ...]] işaretli özetler "Babasının bilmesini istediği şeyler" bölümüne tarihle eklenir.
+- Mevcut satırları güncelle, aynı anlama gelenleri birleştir, geçersizleri sil; şişirme. Defter en fazla yaklaşık 5000 karakter olsun. Tarihler kısa (gg.aa).
+- "Öğrenilen kurallar" bölümüne yalnızca arkadaşın davranışını değiştirecek somut kurallar yaz (örn. "Deneme günü sonucu hiç sorma").
+- "Ona iyi gelenler" ve "İşe yaramayanlar" bölümlerine bu sohbette gözlenen somut şeyleri tarihle ekle.
+- "Takip" bölümüne, bir sonraki sohbette baskı yapmadan sorulabilecek en fazla 3 madde yaz; eski ve kapanmış takipleri sil.
+- Başlıkları ve sırayı koru.
+- Günlük girişi 2-4 satır: "${today} · konu · nasıl hissettiğini kendi sözleriyle · ne işe yaradı / yaramadı · takip".
+
+YALNIZCA şu biçimde JSON döndür, başka hiçbir şey yazma:
+{"defter": "<defterin tam güncel metni, markdown>", "gunluk": "<günlük girişi>"}
+
+=== MEVCUT DEFTER ===
+${defter}
+=== GÜNLÜĞÜN SON GİRİŞLERİ ===
+${gunluk.slice(-1500)}
+=== BUGÜNKÜ SOHBET ===
+${transcript}`;
+}
+
+/* ---------- Durum ---------- */
+const $ = (id) => document.getElementById(id);
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+const state = {
+  apiKey: lsGet(LS.key, ""),
+  model: lsGet(LS.model, "claude-sonnet-5-5"),
+  voiceName: lsGet(LS.voice, ""),
+  rate: parseFloat(lsGet(LS.rate, "0.95")),
+  auto: lsGet(LS.auto, "1") === "1",
+  showText: lsGet(LS.text, "1") === "1",
+  aiName: lsGet(LS.name, ""),
+  defter: lsGet(LS.defter, DEFTER_TEMPLATE),
+  gunluk: lsGet(LS.gunluk, ""),
+  turns: (() => { try { return JSON.parse(lsGet(LS.turns, "[]")); } catch { return []; } })(),
+  turnsSince: parseInt(lsGet(LS.turnsSince, "0"), 10) || 0,
+  busy: false,
+  listening: false,
+  speaking: false,
+  abort: null
+};
+const isFirstTime = () => !/## Hitap ve isimler\n- \S/.test(state.defter);
+
+/* ---------- Arayüz yardımcıları ---------- */
+function toast(msg, ms = 2200) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), ms); }
+function setStatus(msg, live = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("live", live); }
+function setMic(mode) { const m = $("mic"); m.className = mode || ""; }
+function addMsg(role, text) {
+  $("welcome").hidden = true;
+  const d = document.createElement("div"); d.className = "msg " + role; d.textContent = text;
+  $("log").appendChild(d); $("log").scrollTop = $("log").scrollHeight; return d;
+}
+function renderTurns() {
+  const log = $("log"); [...log.querySelectorAll(".msg")].forEach(n => n.remove());
+  $("welcome").hidden = state.turns.length > 0;
+  for (const t of state.turns) addMsg(t.role === "user" ? "me" : "ai", cleanForDisplay(t.content));
+}
+function cleanForDisplay(t) { return t.replace(/\[\[BABA:[^\]]*\]\]/g, "").replace(/\[\[YAZMA\]\]/g, "").trim(); }
+function cleanForSpeech(t) {
+  return cleanForDisplay(t)
+    .replace(/[*_#`>]+/g, "")
+    .replace(/https?:\/\/\S+/g, "")
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, "")
+    .replace(/\s+/g, " ").trim();
+}
+function applyToggles() {
+  document.body.classList.toggle("hidetext", !state.showText);
+  $("btnText").classList.toggle("on", state.showText); $("btnText").setAttribute("aria-pressed", String(state.showText));
+  $("btnAuto").classList.toggle("on", state.auto); $("btnAuto").setAttribute("aria-pressed", String(state.auto));
+  $("optAuto").checked = state.auto; $("optText").checked = state.showText;
+  $("title").firstChild.textContent = state.aiName ? `${state.aiName}` : "Beyza'nın Sesli Arkadaşı";
+}
+function saveTurns() { lsSet(LS.turns, JSON.stringify(state.turns.slice(-60))); lsSet(LS.turnsSince, String(state.turnsSince)); }
+
+/* ---------- Ses: okuma ---------- */
+const synth = window.speechSynthesis;
+let voices = [];
+function loadVoices() {
+  if (!synth) return;
+  voices = synth.getVoices();
+  const sel = $("voice"); sel.innerHTML = "";
+  const tr = voices.filter(v => /^tr/i.test(v.lang));
+  const others = voices.filter(v => !/^tr/i.test(v.lang));
+  const femaleHint = /emel|yelda|filiz|seda|female|kadın|google türkçe|türkçe/i;
+  tr.sort((a, b) => (femaleHint.test(b.name) ? 1 : 0) - (femaleHint.test(a.name) ? 1 : 0));
+  const add = (v, label) => { const o = document.createElement("option"); o.value = v.name; o.textContent = label; sel.appendChild(o); };
+  tr.forEach(v => add(v, `${v.name} (${v.lang})`));
+  if (tr.length === 0) { const o = document.createElement("option"); o.value = ""; o.textContent = "Türkçe ses bulunamadı (cihaz ayarlarından Türkçe ses yükleyin)"; sel.appendChild(o); }
+  others.forEach(v => add(v, `${v.name} (${v.lang})`));
+  if (!state.voiceName || !voices.some(v => v.name === state.voiceName)) state.voiceName = tr[0] ? tr[0].name : "";
+  sel.value = state.voiceName;
+  $("voiceNote").hidden = tr.length > 0;
+}
+if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
+
+function pickVoice() { return voices.find(v => v.name === state.voiceName) || voices.find(v => /^tr/i.test(v.lang)) || null; }
+
+// Cümle cümle okuma: Chrome'un uzun metinleri kesme sorununu da önler.
+const speakQueue = [];
+let speakingNow = false;
+let speechDone = null; // tüm kuyruk bitince çözülür
+function enqueueSpeech(text) {
+  const t = cleanForSpeech(text); if (!t) return;
+  speakQueue.push(t); pumpSpeech();
+}
+function pumpSpeech() {
+  if (speakingNow || !synth) return;
+  const next = speakQueue.shift();
+  if (next === undefined) { state.speaking = false; if (speechDone) { const d = speechDone; speechDone = null; d(); } return; }
+  speakingNow = true; state.speaking = true; setMic("speaking");
+  const u = new SpeechSynthesisUtterance(next);
+  const v = pickVoice(); if (v) u.voice = v;
+  u.lang = v ? v.lang : "tr-TR"; u.rate = state.rate; u.pitch = 1.0;
+  u.onend = u.onerror = () => { speakingNow = false; pumpSpeech(); };
+  synth.speak(u);
+}
+function stopSpeaking() { speakQueue.length = 0; if (synth) synth.cancel(); speakingNow = false; state.speaking = false; if (speechDone) { const d = speechDone; speechDone = null; d(); } }
+function waitSpeech() { return new Promise(res => { if (!speakingNow && speakQueue.length === 0) res(); else speechDone = res; }); }
+
+/* ---------- Ses: dinleme ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null;
+function startListening() {
+  if (!SR) { setStatus("Bu tarayıcı ses tanımayı desteklemiyor. Chrome (Android) veya Safari (iPhone) kullanın."); return; }
+  if (state.busy || state.listening) return;
+  stopSpeaking();
+  rec = new SR(); rec.lang = "tr-TR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  let finalText = "";
+  rec.onstart = () => { state.listening = true; setMic("listening"); setStatus("Dinliyorum... bitince düğmeye tekrar dokun veya sus.", true); };
+  rec.onresult = (e) => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+    }
+    setStatus((finalText + " " + interim).trim() || "Dinliyorum...", true);
+  };
+  rec.onerror = (e) => {
+    state.listening = false; setMic("");
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") setStatus("Mikrofon izni gerekli. Tarayıcı ayarlarından bu sayfaya mikrofon izni verin.");
+    else if (e.error === "no-speech") setStatus("Ses duyamadım. Düğmeye dokunup tekrar dene.");
+    else if (e.error === "network") setStatus("Ses tanıma için internet gerekli.");
+    else setStatus("Dinleme kesildi. Tekrar dene.");
+  };
+  rec.onend = () => {
+    state.listening = false; setMic("");
+    const text = finalText.trim();
+    if (text) send(text); else if (!$("status").textContent.startsWith("Mikrofon")) setStatus("Hazır");
+  };
+  try { rec.start(); } catch { setStatus("Dinleme başlatılamadı. Tekrar dene."); }
+}
+function stopListening() { if (rec && state.listening) { try { rec.stop(); } catch {} } }
+
+/* ---------- Claude API ---------- */
+async function callClaude(messages, system, { stream = false, onDelta, maxTokens = 400, signal } = {}) {
+  const res = await fetch(API_URL, {
+    method: "POST", signal,
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": state.apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true"
+    },
+    body: JSON.stringify({ model: state.model, max_tokens: maxTokens, system, messages, stream })
+  });
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.error?.message || msg; } catch {}
+    const err = new Error(msg); err.status = res.status; throw err;
+  }
+  if (!stream) { const j = await res.json(); return (j.content || []).filter(c => c.type === "text").map(c => c.text).join(""); }
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", full = "";
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n"); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      try {
+        const ev = JSON.parse(line.slice(5).trim());
+        if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") { full += ev.delta.text; onDelta && onDelta(full, ev.delta.text); }
+      } catch {}
+    }
+  }
+  return full;
+}
+function errorText(e) {
+  if (e.name === "AbortError") return "";
+  if (e.status === 401) return "API anahtarı geçersiz görünüyor. Ayarlardan kontrol edin.";
+  if (e.status === 429) return "Şu an çok yoğun; bir dakika sonra tekrar dene.";
+  if (e.status === 400 && /credit|billing/i.test(e.message)) return "API hesabında bakiye yok. Babana söyle, bakiye yüklesin.";
+  if (/Failed to fetch|NetworkError/i.test(e.message)) return "İnternete bağlanamadım.";
+  return "Bir şey ters gitti: " + e.message;
+}
+
+/* ---------- Sohbet akışı ---------- */
+async function send(userText) {
+  if (!state.apiKey) { openSettings(); toast("Önce API anahtarını girin."); return; }
+  state.busy = true; setMic("busy"); setStatus("Düşünüyorum...");
+  state.turns.push({ role: "user", content: userText }); addMsg("me", userText);
+  const bubble = addMsg("ai", "…");
+  const system = systemPrompt(state.defter, state.aiName, isFirstTime());
+  const messages = state.turns.slice(-MAX_TURNS).map(t => ({ role: t.role, content: t.content }));
+  const ctl = new AbortController(); state.abort = ctl;
+  let spokenUpTo = 0;
+  const speakNewSentences = (full, final) => {
+    const visible = final ? cleanForDisplay(full) : cleanForDisplay(full.replace(/\[\[[^\]]*$/, ""));
+    bubble.textContent = visible; $("log").scrollTop = $("log").scrollHeight;
+    const rest = visible.slice(spokenUpTo);
+    const m = final ? [rest] : rest.match(/^[\s\S]*?[.!?…](?=\s|$)/g);
+    if (!m) return;
+    const chunk = final ? rest : m[0];
+    if (chunk.trim()) { enqueueSpeech(chunk); spokenUpTo += chunk.length; }
+  };
+  try {
+    const full = await callClaude(messages, system, { stream: true, signal: ctl.signal, onDelta: (f) => { setStatus("Konuşuyorum..."); speakNewSentences(f, false); } });
+    speakNewSentences(full, true);
+    state.turns.push({ role: "assistant", content: full });
+    state.turnsSince += 1; saveTurns();
+    if (/\[\[BABA:/.test(full)) toast("Bu konuşma babanın görmesi için deftere yazılacak.");
+    await waitSpeech();
+    state.busy = false; setMic(""); setStatus("Hazır");
+    if (state.turnsSince >= AUTO_UPDATE_EVERY) updateDefter(true);
+    if (state.auto && !ctl.signal.aborted) setTimeout(() => { if (!state.busy && !state.listening) startListening(); }, 350);
+  } catch (e) {
+    state.busy = false; setMic("");
+    const t = errorText(e);
+    if (bubble.textContent === "…") bubble.remove();
+    if (t) { addMsg("sys", t); setStatus(t); } else setStatus("Hazır");
+    saveTurns();
+  } finally { state.abort = null; }
+}
+
+async function updateDefter(silent) {
+  if (!state.apiKey || state.turnsSince === 0) return;
+  const today = new Date().toLocaleDateString("tr-TR");
+  const transcript = state.turns.slice(-2 * AUTO_UPDATE_EVERY - 4).map(t => (t.role === "user" ? "Beyza: " : "Arkadaş: ") + t.content).join("\n");
+  if (!silent) setStatus("Defteri güncelliyorum...");
+  try {
+    const raw = await callClaude([{ role: "user", content: updatePrompt(state.defter, state.gunluk, transcript, today) }], "Yalnızca geçerli JSON döndürürsün.", { maxTokens: 4000 });
+    const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
+    const j = JSON.parse(raw.slice(s, e + 1));
+    if (typeof j.defter === "string" && j.defter.includes("## Öğrenilen kurallar")) { state.defter = j.defter; lsSet(LS.defter, state.defter); }
+    if (typeof j.gunluk === "string" && j.gunluk.trim()) { state.gunluk = (state.gunluk ? state.gunluk + "\n\n" : "") + j.gunluk.trim(); lsSet(LS.gunluk, state.gunluk); }
+    state.turnsSince = 0; saveTurns();
+    if (!silent) toast("Defter güncellendi.");
+  } catch (e) { if (!silent) toast("Defter güncellenemedi: " + (errorText(e) || e.message)); }
+  if (!silent) setStatus("Hazır");
+}
+
+async function endConversation() {
+  stopSpeaking(); stopListening();
+  if (state.turnsSince > 0) await updateDefter(false);
+  state.turns = []; state.turnsSince = 0; saveTurns(); renderTurns(); setStatus("Hazır");
+}
+
+/* ---------- Ayarlar / Defter ---------- */
+function openSettings() {
+  $("apiKey").value = state.apiKey; $("model").value = state.model; $("aiName").value = state.aiName;
+  $("rate").value = state.rate; $("rateVal").textContent = state.rate.toFixed(2);
+  $("voice").value = state.voiceName;
+  $("sheetSettings").classList.add("open");
+}
+function closeSettings() { $("sheetSettings").classList.remove("open"); }
+function openDefter() { $("defterText").value = state.defter; $("gunlukText").value = state.gunluk || "(Henüz giriş yok.)"; $("sheetDefter").classList.add("open"); }
+function closeDefter() { $("sheetDefter").classList.remove("open"); $("resetConfirm").hidden = true; }
+function exportText() { return `${state.defter}\n\n---\n\n# Konuşma Günlüğü\n\n${state.gunluk || "(Henüz giriş yok.)"}\n`; }
+
+/* ---------- Olaylar ---------- */
+let synthUnlocked = false;
+$("mic").addEventListener("click", () => {
+  if (synth && !synthUnlocked) { synthUnlocked = true; try { synth.speak(new SpeechSynthesisUtterance(" ")); } catch {} }
+  if (state.listening) { stopListening(); return; }
+  if (state.speaking) { stopSpeaking(); }
+  if (state.busy && state.abort) { state.abort.abort(); return; }
+  startListening();
+});
+$("btnStop").addEventListener("click", () => { stopSpeaking(); if (state.abort) state.abort.abort(); setStatus("Hazır"); });
+$("btnEnd").addEventListener("click", endConversation);
+$("btnAuto").addEventListener("click", () => { state.auto = !state.auto; lsSet(LS.auto, state.auto ? "1" : "0"); applyToggles(); });
+$("btnText").addEventListener("click", () => { state.showText = !state.showText; lsSet(LS.text, state.showText ? "1" : "0"); applyToggles(); });
+$("btnSettings").addEventListener("click", openSettings);
+$("btnDefter").addEventListener("click", openDefter);
+$("btnCloseDefter").addEventListener("click", closeDefter);
+$("rate").addEventListener("input", (e) => { $("rateVal").textContent = parseFloat(e.target.value).toFixed(2); });
+$("btnTestVoice").addEventListener("click", () => {
+  state.voiceName = $("voice").value; state.rate = parseFloat($("rate").value);
+  stopSpeaking(); enqueueSpeech("Merhaba Beyza. Ben senin konuşma arkadaşınım. Sesim böyle; beğendin mi?");
+});
+$("btnSaveSettings").addEventListener("click", () => {
+  state.apiKey = $("apiKey").value.trim(); lsSet(LS.key, state.apiKey);
+  state.model = $("model").value; lsSet(LS.model, state.model);
+  state.voiceName = $("voice").value; lsSet(LS.voice, state.voiceName);
+  state.rate = parseFloat($("rate").value); lsSet(LS.rate, String(state.rate));
+  state.aiName = $("aiName").value.trim(); lsSet(LS.name, state.aiName);
+  state.auto = $("optAuto").checked; lsSet(LS.auto, state.auto ? "1" : "0");
+  state.showText = $("optText").checked; lsSet(LS.text, state.showText ? "1" : "0");
+  applyToggles(); closeSettings(); toast("Kaydedildi.");
+});
+$("btnNewChat").addEventListener("click", async () => { closeSettings(); await endConversation(); toast("Yeni sohbet."); });
+$("tabDefter").addEventListener("click", () => { $("tabDefter").classList.add("on"); $("tabGunluk").classList.remove("on"); $("defterText").hidden = false; $("gunlukText").hidden = true; });
+$("tabGunluk").addEventListener("click", () => { $("tabGunluk").classList.add("on"); $("tabDefter").classList.remove("on"); $("defterText").hidden = true; $("gunlukText").hidden = false; });
+$("btnSaveDefter").addEventListener("click", () => { state.defter = $("defterText").value; lsSet(LS.defter, state.defter); toast("Defter kaydedildi."); });
+$("btnCopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(exportText()); toast("Panoya kopyalandı."); }
+  catch { $("defterText").select(); toast("Metni seçtim; kopyalayabilirsiniz."); }
+});
+$("btnShare").addEventListener("click", async () => {
+  if (navigator.share) { try { await navigator.share({ title: "Beyza Tanıma Defteri", text: exportText() }); } catch {} }
+  else toast("Bu tarayıcıda paylaşım yok; Kopyala'yı kullanın.");
+});
+$("btnDownload").addEventListener("click", () => {
+  const blob = new Blob([exportText()], { type: "text/markdown;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `Beyza_Tanima_Defteri_${new Date().toISOString().slice(0, 10)}.md`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+});
+$("btnResetDefter").addEventListener("click", () => { $("resetConfirm").hidden = false; });
+$("btnResetNo").addEventListener("click", () => { $("resetConfirm").hidden = true; });
+$("btnResetYes").addEventListener("click", () => {
+  state.defter = DEFTER_TEMPLATE; state.gunluk = ""; lsSet(LS.defter, state.defter); lsSet(LS.gunluk, "");
+  $("defterText").value = state.defter; $("gunlukText").value = "(Henüz giriş yok.)"; $("resetConfirm").hidden = true; toast("Defter sıfırlandı.");
+});
+document.querySelectorAll(".sheet").forEach(s => s.addEventListener("click", (e) => { if (e.target === s) { closeSettings(); closeDefter(); } }));
+document.addEventListener("visibilitychange", () => { if (document.hidden) { stopSpeaking(); stopListening(); } });
+
+/* ---------- Başlangıç ---------- */
+applyToggles(); renderTurns();
+if (!state.apiKey) { setStatus("Kurulum için ayarlar düğmesine dokunun."); }
+if (!SR) setStatus("Ses tanıma bu tarayıcıda yok. Chrome (Android) veya Safari (iPhone) kullanın.");
+})();
+</script>
+</body>
+</html>
