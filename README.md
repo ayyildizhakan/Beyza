@@ -1,0 +1,2 @@
+# Beyza
+Beyza_Psikoloji
