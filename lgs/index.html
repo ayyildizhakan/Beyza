@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#3f1d6e">
+<meta name="mobile-web-app-capable" content="yes">
+<title>LGS Koçum</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;800&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<style>
+/* Layout: tek ekranlı uygulama; üstte başlık, ortada içerik (yeni soru / çözüm / arşiv), çözümde alt araç çubuğu.
+   Tema: Arkadaşım ile aynı mor gece paleti. Çözüm kartları (şekiller, tablolar) her iki temada beyaz "kâğıt" üzerinde. */
+:root {
+  --bg: #f5f0fb; --card: #ffffff; --fg: #2a2238; --muted: #6f6680; --line: #e3d9f0;
+  --accent: #6b3fa0; --accent-ink: #ffffff; --accent-soft: #ede3f8; --warn: #b5476b;
+  --sky: radial-gradient(120% 55% at 50% -12%, #e3d0fb 0%, rgba(227,208,251,0) 62%);
+  --paper: #ffffff; --paper-ink: #22202b; --paper-muted: #5d5a68; --paper-line: #e6e1ee;
+  --navy: #1e3a5f; --blue: #2a5d8f; --green: #2f7d5b; --red: #b23a48; --yellow: #c58a00; --purple: #5b3a8f;
+  --font: "Nunito", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #150e22; --card: #211830; --fg: #efe8f8; --muted: #a99cbd; --line: #352848;
+    --accent: #b48ae6; --accent-ink: #1d1030; --accent-soft: #2e2145; --warn: #e88aa8; color-scheme: dark;
+    --sky: radial-gradient(120% 55% at 50% -12%, #3b2163 0%, rgba(59,33,99,0) 65%);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #150e22; --card: #211830; --fg: #efe8f8; --muted: #a99cbd; --line: #352848;
+  --accent: #b48ae6; --accent-ink: #1d1030; --accent-soft: #2e2145; --warn: #e88aa8; color-scheme: dark;
+  --sky: radial-gradient(120% 55% at 50% -12%, #3b2163 0%, rgba(59,33,99,0) 65%);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); background-image: var(--sky); background-repeat: no-repeat;
+  color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.5;
+  display: flex; flex-direction: column; padding-top: env(safe-area-inset-top, 0px);
+}
+button { font-family: inherit; font-size: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+header h1 { min-width: 0; flex: 1; margin: 0; font-size: 19px; font-weight: 800; }
+header .row { flex-wrap: nowrap; flex: none; gap: 6px; }
+header h1 span { display: block; font-size: 13px; font-weight: 600; color: var(--muted); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.iconbtn { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 999px; width: 40px; height: 40px; display: grid; place-items: center; padding: 0; }
+.iconbtn svg { width: 20px; height: 20px; }
+.pill { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 999px; padding: 6px 12px; font-size: 14px; font-weight: 600; }
+.pill.on { background: var(--accent-soft); border-color: var(--accent); }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 12px; padding: 10px 14px; font-weight: 700; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.big { width: 100%; padding: 14px; font-size: 17px; }
+.btn:disabled { opacity: .5; }
+main { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 24px; }
+.view { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
+.panel h2 { margin: 0 0 6px; font-size: 18px; }
+.small { font-size: 13.5px; color: var(--muted); }
+.pickrow { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pick { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 18px 10px; border: 2px dashed var(--line); border-radius: 16px; background: var(--accent-soft); color: var(--fg); font-weight: 700; }
+.pick svg { width: 34px; height: 34px; color: var(--accent); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.thumb { position: relative; width: 92px; height: 92px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb button { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; border-radius: 50%; border: none; background: rgba(0,0,0,.6); color: #fff; font-size: 15px; line-height: 1; }
+textarea, input[type=text], input[type=password], select { width: 100%; font-family: inherit; font-size: 16px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+textarea { min-height: 70px; resize: vertical; }
+label.lbl { font-weight: 700; font-size: 14px; display: block; margin: 12px 0 6px; }
+.choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.choices button { min-width: 48px; }
+.status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-weight: 600; }
+.spinner { width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--accent-soft); border-top-color: var(--accent); animation: spin 1s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; }
+.cost { font-size: 12.5px; color: var(--muted); }
+.qimgs { display: flex; gap: 8px; overflow-x: auto; }
+.qimgs img { flex: none; max-height: 220px; max-width: 100%; border-radius: 12px; border: 1px solid var(--line); }
+
+/* ---- Çözüm "kâğıdı" (modelin ürettiği HTML bu sınıfları kullanır) ---- */
+.paper { background: var(--paper); color: var(--paper-ink); border-radius: 18px; padding: 16px; border: 1px solid var(--paper-line); overflow-wrap: anywhere; }
+.paper h3 { margin: 18px 0 8px; font-size: 17px; color: var(--navy); border-bottom: 3px solid var(--purple); padding-bottom: 4px; }
+.paper h4 { margin: 6px 0; font-size: 15px; color: var(--blue); }
+.paper p, .paper li { line-height: 1.55; }
+.paper ul, .paper ol { padding-left: 20px; margin: 6px 0; }
+.paper .qhead { background: linear-gradient(135deg, #3f1d6e, #6b3fa0); color: #fff; border-radius: 14px; padding: 12px 14px; }
+.paper .qhead .qtitle { font-weight: 800; font-size: 17px; }
+.paper .chip { display: inline-block; background: rgba(255,255,255,.18); color: inherit; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; font-weight: 700; margin: 4px 4px 0 0; }
+.paper .strip { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.paper .strip span { background: #fff; color: var(--paper-ink); border-radius: 8px; padding: 3px 8px; font-size: 13px; font-weight: 700; }
+.paper .strip .s-you { color: var(--red); } .paper .strip .s-ok { color: var(--green); }
+.paper .qtext { background: #f6f3fb; border-left: 4px solid var(--purple); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.paper .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.paper .cols > div { background: #f7f8fb; border-radius: 10px; padding: 8px 10px; min-width: 0; }
+.paper .concept { background: #eef4fb; border-radius: 10px; padding: 10px 12px; }
+.paper .step { display: grid; grid-template-columns: 30px 1fr; gap: 10px; margin: 12px 0; }
+.paper .step .num { width: 28px; height: 28px; border-radius: 50%; background: var(--purple); color: #fff; display: grid; place-items: center; font-weight: 800; font-size: 14px; }
+.paper .step > div { min-width: 0; }
+.paper .eq { background: #f7f8fb; border: 1px solid var(--paper-line); border-radius: 10px; padding: 8px 12px; margin: 6px 0; overflow-x: auto; font-variant-numeric: tabular-nums; }
+.paper .stop { color: var(--red); font-weight: 700; font-size: 13.5px; }
+.paper figure.fig { margin: 12px 0; background: #fff; border: 1px solid var(--paper-line); border-radius: 12px; padding: 8px; break-inside: avoid; }
+.paper figure.fig svg { width: 100%; height: auto; max-width: 520px; display: block; margin: 0 auto; }
+.paper figcaption { font-size: 13px; color: var(--paper-muted); text-align: center; margin-top: 4px; }
+.paper .tablewrap, .paper table { max-width: 100%; }
+.paper table { border-collapse: collapse; width: 100%; font-size: 14px; margin: 8px 0; display: block; overflow-x: auto; }
+.paper th { background: var(--navy); color: #fff; text-align: left; padding: 6px 8px; }
+.paper td { border-bottom: 1px solid var(--paper-line); padding: 6px 8px; vertical-align: top; }
+.paper th:first-child, .paper td:first-child { white-space: nowrap; }
+.paper tr.correct td { background: #e6f4ec; } .paper tr.chosen td { background: #fbe7ea; }
+.paper .student { background: #fff7e6; border-left: 4px solid var(--yellow); border-radius: 8px; padding: 10px 12px; }
+.paper .check li { list-style: none; } .paper .check { padding-left: 4px; }
+.paper .tag-warn, .paper .tag-think, .paper .tag-tip, .paper .tag-fast, .paper .tag-confirm { border-radius: 10px; padding: 9px 12px; margin: 8px 0; border-left: 5px solid; }
+.paper .tag-warn { background: #fdecef; border-color: var(--red); }
+.paper .tag-think { background: #e9f1fb; border-color: var(--blue); }
+.paper .tag-tip { background: #fff6dc; border-color: var(--yellow); }
+.paper .tag-fast { background: #e6f4ec; border-color: var(--green); }
+.paper .tag-confirm { background: #fff1d6; border-color: #d98a00; font-weight: 700; }
+.paper .end { margin-top: 14px; padding-top: 10px; border-top: 2px dashed var(--paper-line); font-weight: 700; }
+.paper .katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+/* ---- Kendin dene ---- */
+.practice .q { font-weight: 600; }
+.practice .opts { display: grid; gap: 8px; margin-top: 10px; }
+.practice .opts button { text-align: left; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 12px; padding: 10px 12px; }
+.practice .opts button.right { border-color: #2f7d5b; background: rgba(47,125,91,.15); }
+.practice .opts button.wrong { border-color: var(--warn); background: rgba(181,71,107,.15); }
+.practice .fb { margin-top: 10px; }
+
+/* ---- Takip soruları ---- */
+.follow .ask { display: flex; gap: 8px; align-items: flex-end; }
+.follow .ask textarea { min-height: 52px; }
+.fq { margin: 10px 0 6px; font-weight: 700; color: var(--accent); }
+
+/* ---- Arşiv ---- */
+.filters { display: flex; flex-wrap: wrap; gap: 6px; }
+.item { display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px; text-align: left; color: var(--fg); width: 100%; }
+.item img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; }
+.item .t { font-weight: 800; } .item .m { font-size: 13px; color: var(--muted); }
+.item > div { min-width: 0; }
+.empty { text-align: center; color: var(--muted); padding: 30px 10px; }
+
+/* ---- Ayarlar ---- */
+.sheet { position: fixed; inset: 0; background: rgba(20,12,34,.5); display: none; align-items: flex-end; justify-content: center; z-index: 20; }
+.sheet.open { display: flex; }
+.sheet .panel { width: min(640px, 100%); max-height: 92%; overflow-y: auto; border-radius: 20px 20px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 999px; font-size: 14px; z-index: 30; display: none; max-width: 90%; text-align: center; }
+.toast.show { display: block; }
+.confirm { background: var(--accent-soft); border-radius: 12px; padding: 10px 12px; margin-top: 8px; }
+@media (max-width: 420px) { .paper .cols { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>LGS Koçum<span id="sub">Çözemediğin soruyu çek, birlikte çözelim.</span></h1>
+  <div class="row">
+    <button class="pill" id="btnInstall" hidden>Yükle</button>
+    <button class="iconbtn" id="btnNew" title="Yeni soru" aria-label="Yeni soru" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button class="iconbtn" id="btnArchive" title="Arşiv" aria-label="Çözüm arşivi">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="5" rx="1"/><path d="M5 9v10h14V9M10 13h4"/></svg>
+    </button>
+    <button class="iconbtn" id="btnSettings" title="Ayarlar" aria-label="Ayarlar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <!-- YENİ SORU -->
+  <div class="view" id="vNew">
+    <div class="panel">
+      <h2>Çözemediğin soru</h2>
+      <p class="small">Sorunun tamamı (şekil, tablo ve şıklar dahil) görünecek şekilde, düz ve net bir fotoğraf çek. Soru iki sayfaya bölünmüşse birden fazla fotoğraf ekleyebilirsin.</p>
+      <div class="pickrow">
+        <button class="pick" id="btnCam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></svg>Fotoğraf çek</button>
+        <button class="pick" id="btnGal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></svg>Galeriden seç</button>
+      </div>
+      <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+      <input type="file" id="fileGal" accept="image/*" multiple hidden>
+      <div class="thumbs" id="thumbs" style="margin-top:12px"></div>
+
+      <label class="lbl" for="note">Takıldığın yer ya da soru numarası (isteğe bağlı)</label>
+      <textarea id="note" placeholder="Örn: 7. soru. Şekildeki açıyı nasıl bulacağımı anlamadım."></textarea>
+
+      <label class="lbl">Senin cevabın neydi? (isteğe bağlı)</label>
+      <div class="choices" id="myAnswer">
+        <button class="pill" data-v="A">A</button><button class="pill" data-v="B">B</button><button class="pill" data-v="C">C</button><button class="pill" data-v="D">D</button><button class="pill" data-v="Boş">Boş bıraktım</button>
+      </div>
+
+      <div style="margin-top:16px"><button class="btn primary big" id="btnSolve" disabled>Çöz</button></div>
+      <p class="small" id="modelNote" style="margin-top:8px"></p>
+    </div>
+  </div>
+
+  <!-- ÇÖZÜM -->
+  <div class="view" id="vSol" hidden>
+    <div class="qimgs" id="solImgs"></div>
+    <div class="status" id="solStatus" hidden><span class="spinner"></span><span id="solStatusText">Soruyu okuyorum...</span></div>
+    <div class="paper" id="paper" hidden></div>
+    <div class="toolbar" id="solTools" hidden>
+      <button class="btn" id="btnSpeak">🔊 Sesli anlat</button>
+      <button class="btn" id="btnShare">Paylaş</button>
+      <button class="btn" id="btnRetry" hidden>Yeniden dene</button>
+    </div>
+    <div class="cost" id="solCost"></div>
+
+    <div class="panel practice" id="practice" hidden>
+      <h2>✍️ Kendin dene</h2>
+      <div class="q" id="pq"></div>
+      <div class="opts" id="popts"></div>
+      <div class="fb" id="pfb"></div>
+    </div>
+
+    <div class="panel follow" id="follow" hidden>
+      <h2>🤔 Anlamadığın bir yer mi var?</h2>
+      <p class="small">Takıldığın adımı yaz; sadece o kısmı daha ayrıntılı anlatayım.</p>
+      <div id="fList"></div>
+      <div class="ask">
+        <textarea id="fInput" placeholder="Örn: 3. adımda neden 2'ye böldük?"></textarea>
+        <button class="btn primary" id="fSend">Sor</button>
+      </div>
+      <div class="status" id="fStatus" hidden style="margin-top:8px"><span class="spinner"></span><span>Düşünüyorum...</span></div>
+    </div>
+  </div>
+
+  <!-- ARŞİV -->
+  <div class="view" id="vArc" hidden>
+    <div class="panel">
+      <h2>Çözüm arşivi</h2>
+      <p class="small">Çözdüğün her soru burada saklanır. Derse göre süzebilirsin.</p>
+      <div class="filters" id="filters" style="margin-top:8px"></div>
+    </div>
+    <div id="arcList" class="view" style="gap:10px"></div>
+  </div>
+</main>
+
+<!-- AYARLAR -->
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="hSet">
+  <div class="panel">
+    <h2 id="hSet">Ayarlar</h2>
+    <p class="small">Bu bölüm baban içindir.</p>
+    <label class="lbl" for="apiKey">Anthropic API anahtarı</label>
+    <input type="password" id="apiKey" autocomplete="off" placeholder="sk-ant-...">
+    <p class="small">Arkadaşım uygulamasındaki anahtarla aynıdır; orada girdiysen burada da hazırdır.</p>
+    <label class="lbl" for="model">Model</label>
+    <select id="model">
+      <option value="claude-fable-5-1">Claude Fable 5.1 · en güçlü (soru başı ~30–70 sent)</option>
+      <option value="claude-opus-5-5">Claude Opus 5.5 · çok güçlü (soru başı ~12–25 sent)</option>
+      <option value="claude-sonnet-5-5">Claude Sonnet 5.5 · ekonomik (soru başı ~5–8 sent)</option>
+    </select>
+    <label class="lbl">Bu ayki harcama (yaklaşık)</label>
+    <p id="monthCost" style="margin:0;font-weight:700"></p>
+    <p class="small">Sesli anlatım, Arkadaşım uygulamasındaki ses ayarlarını (Azure Emel vb.) kullanır.</p>
+    <div class="row" style="margin-top:14px"><button class="btn primary" id="btnSaveSet">Kaydet ve kapat</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = (id) => document.getElementById(id);
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const API_URL = "https://api.anthropic.com/v1/messages";
+const PRICES = { "claude-fable-5-1": [10, 50], "claude-opus-5-5": [4, 20], "claude-sonnet-5-5": [2, 10] };
+const MODEL_NAMES = { "claude-fable-5-1": "Claude Fable 5.1", "claude-opus-5-5": "Claude Opus 5.5", "claude-sonnet-5-5": "Claude Sonnet 5.5" };
+
+const state = {
+  apiKey: lsGet("bd_apiKey", ""),           // Arkadaşım ile ortak
+  model: lsGet("lk_model", "claude-fable-5-1"),
+  images: [],      // {data (base64), url (dataURL)}
+  myAnswer: null,
+  current: null,   // açık kayıt
+  busy: false
+};
+
+/* ---------------- Ortak yardımcılar ---------------- */
+function toast(m, ms = 2400) { const t = $("toast"); t.textContent = m; t.classList.add("show"); clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), ms); }
+function show(view) {
+  for (const v of ["vNew", "vSol", "vArc"]) $(v).hidden = v !== view;
+  $("btnNew").hidden = view === "vNew";
+  document.querySelector("main").scrollTop = 0;
+}
+function monthKey() { const d = new Date(); return `lk_cost_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; }
+function addCost(usd) { const k = monthKey(); lsSet(k, String((parseFloat(lsGet(k, "0")) || 0) + usd)); }
+function costOf(model, inTok, outTok) { const p = PRICES[model] || [10, 50]; return (inTok * p[0] + outTok * p[1]) / 1e6; }
+function fmtUsd(x) { return x < 1 ? `${Math.round(x * 100)} sent` : `$${x.toFixed(2)}`; }
+function updateModelNote() { $("modelNote").textContent = `Çözümü ${MODEL_NAMES[state.model] || state.model} hazırlar. Zor sorularda 1–2 dakika sürebilir.`; }
+
+/* ---------------- Sanitize + matematik ---------------- */
+function sanitize(html) {
+  if (!window.DOMPurify) return html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/\son\w+="[^"]*"/gi, "");
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true, svg: true, svgFilters: true }, FORBID_TAGS: ["style", "script", "iframe", "form", "input", "button"], FORBID_ATTR: ["onerror", "onload", "onclick"] });
+}
+function renderMath(el) {
+  if (!window.renderMathInElement) return;
+  try { renderMathInElement(el, { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }, { left: "\\(", right: "\\)", display: false }, { left: "\\[", right: "\\]", display: true }], throwOnError: false, ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code", "svg"] }); } catch {}
+}
+
+/* ---------------- Görüntü işleme ---------------- */
+function loadImage(file) {
+  return new Promise((res, rej) => { const url = URL.createObjectURL(file); const img = new Image(); img.onload = () => res({ img, url }); img.onerror = rej; img.src = url; });
+}
+async function compress(file, maxSide = 1600, q = 0.85) {
+  const { img, url } = await loadImage(file);
+  const s = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+  const dataUrl = c.toDataURL("image/jpeg", q);
+  return { url: dataUrl, data: dataUrl.split(",")[1] };
+}
+async function thumbOf(dataUrl, side = 160) {
+  const img = new Image(); img.src = dataUrl; await img.decode();
+  const s = side / Math.max(img.naturalWidth, img.naturalHeight);
+  const c = document.createElement("canvas"); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+  c.getContext("2d").drawImage(img, 0, 0, c.width, c.height); return c.toDataURL("image/jpeg", 0.7);
+}
+function renderThumbs() {
+  const box = $("thumbs"); box.innerHTML = "";
+  state.images.forEach((im, i) => {
+    const d = document.createElement("div"); d.className = "thumb";
+    const img = document.createElement("img"); img.src = im.url; img.alt = `Fotoğraf ${i + 1}`;
+    const x = document.createElement("button"); x.textContent = "×"; x.setAttribute("aria-label", "Fotoğrafı kaldır");
+    x.onclick = () => { state.images.splice(i, 1); renderThumbs(); };
+    d.append(img, x); box.appendChild(d);
+  });
+  $("btnSolve").disabled = state.images.length === 0;
+}
+async function addFiles(files) {
+  for (const f of files) {
+    if (state.images.length >= 4) { toast("En fazla 4 fotoğraf ekleyebilirsin."); break; }
+    try { state.images.push(await compress(f)); } catch { toast("Bu fotoğraf açılamadı, başka bir tane dene."); }
+  }
+  renderThumbs();
+}
+
+/* ---------------- Talimatlar (LGS_Uzmanı çözüm standardı) ---------------- */
+const SYSTEM = `Sen LGS_Uzmanı'sın: MEB 8. sınıf müfredatına ve LGS'ye bütünüyle hakim, yılların tecrübesine sahip, sabırlı ve cesaretlendirici bir öğretmen ve eğitim koçusun. Öğrencin Beyza (8. sınıf, LGS'ye hazırlanıyor). Beyza çözemediği bir sorunun fotoğrafını gönderdi.
+
+GÖREVİN: Soruyu DOĞRU çözmek ve Beyza kitapçığı kapatıp tek başına okuduğunda konuyu baştan öğrenebileceği kadar ayrıntılı, görsel bir çözüm yazmak. Uzunluk sorun değildir; anlaşılmamak sorundur. Hiçbir çözümü birkaç satıra sıkıştırma.
+
+DOĞRULUK (en önemli):
+- Soruyu kendin bağımsız çöz. Her işlemi iki kez kontrol et. Mümkünse şıkları tek tek soruya geri koyarak doğrula.
+- Fotoğrafta cevap anahtarı, öğretmen işareti ya da daire içine alınmış şık varsa kendi çözümünle karşılaştır. Çelişki varsa sessizce düzeltme: <div class="tag-confirm">Teyit gerekli: ...</div> kutusunda iki sonucu ve olası nedeni yaz; META.status="check".
+- Fotoğraf bulanık, soru kesik ya da bir kısmı okunmuyorsa ASLA tahmin edip kesin bilgi gibi sunma. Neyin okunamadığını açıkça söyle, daha net fotoğraf iste; META.status="unclear" (çözüm yazabildiğin kadarıyla, varsayımlarını belirterek).
+- Fotoğrafta birden fazla soru varsa Beyza'nın notunda belirttiği soruyu çöz. Belirtmemişse işaretli/yuvarlak içine alınmış olanı, o da yoksa en belirgin olanı çöz ve hangisini çözdüğünü baştaki soru kartında belirt.
+
+ANLATIM DİLİ:
+- 8. sınıf düzeyi, kısa cümleler. Terim ilk geçtiğinde parantez içinde açıkla ("isyan = silahlı ayaklanma").
+- Her adımda "neden" sorusunu cevapla; sadece "şunu yap" deme.
+- Matematikte bir 8. sınıf öğrencisinin doğal düşüneceği yoldan git: sezgisel tahmin, değer verme, küçük sayılarla örnek, çizim. a^n(a^k−1) gibi soyut cebirsel genellemelerle anlatma. İki yol ver: adım adım yol + kısa yol ([⚡] pratik taktik) ve ikisinin aynı sonuca vardığını göster. Ara işlemleri atlama.
+- Sözel derslerde (Türkçe, İnkılap, Din, İngilizce, Fen yorum soruları) kanıt cümlesini metinden tırnakla alıntıla ve şıklarla yan yana tabloya koy. İngilizce sorularda açıklamalar Türkçe, gerekli İngilizce ifadeler orijinal hâliyle.
+- Ton: suçlamayan, anlayışlı. "Konuyu biliyorsun, şu adımı ekleyelim" dili. Duygusal çeldiricileri nazikçe adlandır.
+- Beyza'nın notunda sınav stresi ya da üzüntü sezersen tek cümleyle şefkatle karşılık ver ve çözüme geç.
+
+ÇIKTI BİÇİMİ (birebir uy, başka hiçbir şey yazma):
+<<<META
+{ "subject": "Matematik | Fen Bilimleri | Türkçe | T.C. İnkılap Tarihi ve Atatürkçülük | Din Kültürü | İngilizce | Diğer",
+  "topic": "öğretmenin tahtaya yazacağı kadar somut konu adı",
+  "kazanim": "MEB kazanım kodu (ör. M.8.1.1.1) ya da boş",
+  "answer": "A/B/C/D ya da kısa sonuç",
+  "student_answer": "Beyza'nın cevabı (notundan ya da kitapçıktaki işaretten) ya da null",
+  "error_type": "Bilgi/Kavram | Dikkat/Soru kökü | Yorum/Çıkarım | İşlem | Süre | Kararsızlık | null",
+  "status": "ok | check | unclear",
+  "difficulty": "Kolay | Orta | Zor",
+  "narration": "Sesli anlatım metni: 120–220 kelime, düz ve sıcak Türkçe, madde işareti yok; matematik ifadelerini kelimeyle yaz (x kare, üçte iki, karekök on altı); şekilleri sözle tarif et.",
+  "practice": { "question": "Aynı tuzağı içeren, sayıları değiştirilmiş özgün soru (matematik için $...$ kullanabilirsin)", "options": {"A":"...","B":"...","C":"...","D":"..."}, "answer": "A/B/C/D", "explanation": "2–4 cümlelik kısa çözüm" } }
+META>>>
+<<<HTML
+(çözüm HTML parçası)
+HTML>>>
+
+META geçerli JSON olmalı (çift tırnak, sonda virgül yok).
+
+HTML PARÇASI — bu sırayla, her bölüm <section> içinde ve <h3> başlıklı:
+1. Soru kartı:
+<div class="qhead"><div class="qtitle">Ders · kısa konu adı</div><span class="chip">kazanım kodu</span><div class="strip"><span class="s-you">Senin cevabın: …</span><span class="s-ok">Doğru cevap: …</span><span>Hata türü: …</span><span>Hedef süre: 2 dk</span></div></div>
+(Bilinmeyen alanları yazma.)
+2. <h3>🔍 Soruyu anlayalım</h3> <div class="qtext">Soru metni sadeleştirilmiş ama eksiksiz; sayılar, şartlar ve soru kökü <b>kalın</b>, kritik şart <u>altı çizili</u></div> sonra <div class="cols"><div><h4>Verilenler</h4><ul>… örtük bilgiler dahil</ul></div><div><h4>İstenen</h4><p>… "ne değil" uyarısıyla</p></div></div>
+3. <h3>🧠 Önce kavram</h3> (gerekiyorsa) <div class="concept">tanım/kural 2–4 cümle, formül, 1–2 mini örnek</div> ve sık hata için <div class="tag-warn">[!] DİKKAT: …</div>
+4. <h3>🪜 Adım adım çözüm</h3> her adım: <div class="step"><span class="num">1</span><div><b>Kısa adım başlığı.</b><p>Bu adımı neden atıyoruz.</p><div class="eq">işlemler alt alta (LaTeX)</div></div></div>. Ara sonuçlarda <p class="stop">⛔ Burada durma, bu ara sonuç.</p>. Düşünmeye davet için <div class="tag-think">[?] DÜŞÜN: …</div>.
+5. ŞEKİL: En az bir şekil ZORUNLU, ilgili adımın yanına: <figure class="fig"><svg …>…</svg><figcaption>Şekil – şekilde neye bakılacağı</figcaption></figure>. Geometri, ölçme, oran, sayı doğrusu, süreç, deney düzeneği, sınıflandırma sorularında mutlaka; metin sorularında kavram haritası, "açıkça yazıyor / çıkarılabilir / çelişiyor" üç kutu şeması veya eşleştirme şeması. Soruda görsel varsa onu yeniden çizip üzerinde işaretle. Süreç sorularında önce→sonra kareleri.
+6. <h3>🔢 Başka bir gözle</h3> uygun olanlardan en az biri: deneme tablosu (uygun satır yeşil class="correct", bozan satır class="chosen"), değer vererek örüntü, günlük hayat benzetmesi, karar şeması, zaman çizelgesi, karşılaştırma tablosu.
+7. <h3>🧭 Sen ne yaptın?</h3> (yalnızca Beyza'nın cevabı biliniyorsa ya da kitapçıkta iz varsa) <div class="student">önce doğru yaptığı kısmı söyle, sonra tam olarak hangi adımda saptığını göster; anlayışlı dil</div>
+8. <h3>✅ Kontrol</h3> <ul class="check"><li>✔ şart 1 sağlanıyor…</li></ul> + mantık kontrolü.
+9. <h3>🎯 Şık analizi</h3> <table><tr><th>Şık</th><th>Nereden çıkar?</th><th>Neden doğru/yanlış?</th></tr>…</table> doğru satır class="correct", Beyza'nın seçtiği yanlış satır class="chosen".
+10. <div class="tag-tip">💡 Akılda kalsın: tek cümlelik kural</div><div class="tag-fast">⚡ Pratik taktik: 30 saniyelik kısa yol</div>
+11. <p class="end">Cevap: X · Zorluk: … · Tuzak: varsa çeldirici şık ve neden yanlış</p>
+("Kendin dene" sorusunu HTML'e YAZMA; META.practice'ten uygulama gösterir.)
+
+SVG KURALLARI: <svg viewBox="0 0 360 H" xmlns="http://www.w3.org/2000/svg"> (H ihtiyaca göre 140–320); beyaz zemin varsay; font-family="sans-serif", en küçük yazı font-size 13; renkler: verilen ölçüler #1e3a5f, bulunan/ara değerler #2a5d8f, sonuç #2f7d5b kalın, uyarı/tuzak #b23a48, yardımcı çizgiler #9aa3ad kesikli (stroke-dasharray="4 3"); her şekle fill belirt; yazılar şeklin içinde kalsın, üst üste binmesin; ölçü okları için marker kullanabilirsin; şekildeki tüm sayılar çözümdekiyle birebir aynı; Beyza'nın hatası varsa kırmızı kesikli çizgi ve "Burada durdun" etiketi; her SVG 4 KB'ı geçmesin; dış resim yok.
+
+MATEMATİK: LaTeX kullan: satır içi $...$, ayrı satır $$...$$. Markdown KULLANMA (**, #, - liste yok). Yalnızca şu etiketler: section, div, h3, h4, p, b, i, u, br, ul, ol, li, table, tr, th, td, span, figure, figcaption, svg ve svg öğeleri. script, style, form, button, olay öznitelikleri (onclick vb.) yok.`;
+
+function buildUserContent(images, note, myAnswer) {
+  const content = images.map(im => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: im.data } }));
+  let t = "Çözemediğim soru fotoğrafta.";
+  if (note && note.trim()) t += `\nNotum: ${note.trim()}`;
+  if (myAnswer) t += `\nBenim cevabım: ${myAnswer}`;
+  t += "\nLütfen talimatlardaki biçime birebir uyarak çöz.";
+  content.push({ type: "text", text: t });
+  return content;
+}
+
+/* ---------------- API (akışlı) ---------------- */
+async function streamClaude({ system, messages, maxTokens = 32000, onText, onPhase, signal }) {
+  const res = await fetch(API_URL, {
+    method: "POST", signal,
+    headers: { "content-type": "application/json", "x-api-key": state.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: state.model, max_tokens: maxTokens, system, messages, stream: true })
+  });
+  if (!res.ok) { let m = `HTTP ${res.status}`; try { const j = await res.json(); m = j.error?.message || m; } catch {} const e = new Error(m); e.status = res.status; throw e; }
+  const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", full = "", inTok = 0, outTok = 0, stop = null;
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const lines = buf.split("\n"); buf = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith("data:")) continue;
+      let ev; try { ev = JSON.parse(line.slice(5).trim()); } catch { continue; }
+      if (ev.type === "message_start") { const u = ev.message?.usage || {}; inTok = (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0); }
+      else if (ev.type === "content_block_start" && ev.content_block?.type === "thinking") onPhase && onPhase("thinking");
+      else if (ev.type === "content_block_delta" && ev.delta?.type === "text_delta") { full += ev.delta.text; onText && onText(full); }
+      else if (ev.type === "message_delta") { if (ev.usage?.output_tokens) outTok = ev.usage.output_tokens; if (ev.delta?.stop_reason) stop = ev.delta.stop_reason; }
+      else if (ev.type === "error") { const e = new Error(ev.error?.message || "Akış hatası"); throw e; }
+    }
+  }
+  return { text: full, inTok, outTok, stop };
+}
+function apiErrorText(e) {
+  if (e.name === "AbortError") return "";
+  if (e.status === 401) return "API anahtarı geçersiz görünüyor. Ayarlardan kontrol edin.";
+  if (e.status === 429) return "Şu an çok yoğun; bir dakika sonra tekrar dene.";
+  if (e.status === 529 || e.status === 503) return "Sunucu şu an meşgul; biraz sonra tekrar dene.";
+  if (/credit|billing|balance/i.test(e.message)) return "API hesabında bakiye kalmamış. Babana söyle, bakiye yüklesin.";
+  if (/model/i.test(e.message) && e.status === 404) return "Seçilen model bu hesapta kullanılamıyor. Ayarlardan başka bir model seç.";
+  if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) return "İnternete bağlanamadım.";
+  return "Bir sorun oldu: " + e.message;
+}
+
+/* ---------------- Çıktıyı ayrıştır ---------------- */
+function parseOutput(text) {
+  let meta = null;
+  const m = text.match(/<<<META\s*([\s\S]*?)\s*META>>>/);
+  if (m) { try { meta = JSON.parse(m[1]); } catch { try { meta = JSON.parse(m[1].replace(/,\s*([}\]])/g, "$1")); } catch {} } }
+  let html = "";
+  const hs = text.indexOf("<<<HTML");
+  if (hs >= 0) { html = text.slice(hs + 7); const he = html.indexOf("HTML>>>"); if (he >= 0) html = html.slice(0, he); }
+  else if (!m) html = text; // biçim dışı cevap: olduğu gibi göster
+  return { meta, html: html.trim() };
+}
+function partialHtml(text) {
+  const hs = text.indexOf("<<<HTML"); if (hs < 0) return null;
+  let h = text.slice(hs + 7); const he = h.indexOf("HTML>>>"); if (he >= 0) h = h.slice(0, he);
+  return h.replace(/<[^>]*$/, ""); // yarım kalmış etiketi at
+}
+
+/* ---------------- Arşiv (IndexedDB) ---------------- */
+const DB = { db: null };
+function openDB() {
+  return new Promise((res, rej) => {
+    if (DB.db) return res(DB.db);
+    const r = indexedDB.open("lgs-kocum", 1);
+    r.onupgradeneeded = () => { const s = r.result.createObjectStore("sol", { keyPath: "id" }); s.createIndex("ts", "ts"); };
+    r.onsuccess = () => { DB.db = r.result; res(DB.db); };
+    r.onerror = () => rej(r.error);
+  });
+}
+async function dbPut(rec) { const db = await openDB(); return new Promise((res, rej) => { const tx = db.transaction("sol", "readwrite"); tx.objectStore("sol").put(rec); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+async function dbAll() { const db = await openDB(); return new Promise((res, rej) => { const q = db.transaction("sol").objectStore("sol").getAll(); q.onsuccess = () => res(q.result.sort((a, b) => b.ts - a.ts)); q.onerror = () => rej(q.error); }); }
+async function dbDel(id) { const db = await openDB(); return new Promise((res, rej) => { const tx = db.transaction("sol", "readwrite"); tx.objectStore("sol").delete(id); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+
+/* ---------------- Çözüm akışı ---------------- */
+let ctl = null;
+function setStatus(on, text) { $("solStatus").hidden = !on; if (text) $("solStatusText").textContent = text; }
+function renderSolution(rec) {
+  $("solImgs").innerHTML = "";
+  for (const u of rec.images) { const i = document.createElement("img"); i.src = u; i.alt = "Soru fotoğrafı"; $("solImgs").appendChild(i); }
+  const p = $("paper"); p.hidden = false; p.innerHTML = sanitize(rec.html || "<p>Çözüm boş geldi.</p>"); renderMath(p);
+  $("solTools").hidden = false; $("btnRetry").hidden = true; $("btnSpeak").hidden = false; $("btnShare").hidden = false;
+  $("solCost").textContent = rec.cost != null ? `${MODEL_NAMES[rec.model] || rec.model} · bu çözüm yaklaşık ${fmtUsd(rec.cost)}` : "";
+  renderPractice(rec); renderFollowups(rec);
+  $("follow").hidden = false;
+}
+function renderPractice(rec) {
+  const pr = rec.meta && rec.meta.practice;
+  if (!pr || !pr.options) { $("practice").hidden = true; return; }
+  $("practice").hidden = false;
+  $("pq").innerHTML = sanitize(String(pr.question || "")); renderMath($("pq"));
+  const box = $("popts"); box.innerHTML = ""; $("pfb").innerHTML = "";
+  for (const k of ["A", "B", "C", "D"]) {
+    if (pr.options[k] == null) continue;
+    const b = document.createElement("button"); b.innerHTML = `<b>${k})</b> ` + sanitize(String(pr.options[k]));
+    b.onclick = () => {
+      const right = String(pr.answer || "").trim().toUpperCase().startsWith(k);
+      [...box.children].forEach(x => x.disabled = true);
+      b.classList.add(right ? "right" : "wrong");
+      if (!right) { const idx = ["A", "B", "C", "D"].indexOf(String(pr.answer).trim().toUpperCase()[0]); if (idx >= 0 && box.children[idx]) box.children[idx].classList.add("right"); }
+      $("pfb").innerHTML = `<p><b>${right ? "Doğru! Tam da öğrendiğin adımı uyguladın." : "Bu sefer olmadı; sorun değil, birlikte bakalım."}</b></p><p>${sanitize(String(pr.explanation || ""))}</p>`;
+      renderMath($("pfb")); renderMath(box);
+      rec.practiceTry = { pick: k, right }; dbPut(rec).catch(() => {});
+    };
+    box.appendChild(b);
+  }
+  renderMath(box);
+}
+function renderFollowups(rec) {
+  const list = $("fList"); list.innerHTML = "";
+  for (const f of rec.followups || []) {
+    const q = document.createElement("div"); q.className = "fq"; q.textContent = "Sen: " + f.q;
+    const a = document.createElement("div"); a.className = "paper"; a.innerHTML = sanitize(f.html); renderMath(a);
+    list.append(q, a);
+  }
+}
+
+async function solve() {
+  if (!state.apiKey) { openSettings(); toast("Önce API anahtarını girin."); return; }
+  if (state.busy) return;
+  state.busy = true; stopSpeak();
+  const note = $("note").value;
+  const rec = { id: String(Date.now()), ts: Date.now(), images: state.images.map(i => i.url), note, myAnswer: state.myAnswer, model: state.model, raw: "", html: "", meta: null, followups: [] };
+  state.current = rec;
+  const oldDel = $("delBox"); if (oldDel) oldDel.remove();
+  show("vSol");
+  $("solImgs").innerHTML = ""; for (const u of rec.images) { const i = document.createElement("img"); i.src = u; i.alt = "Soru fotoğrafı"; $("solImgs").appendChild(i); }
+  $("paper").hidden = true; $("paper").innerHTML = ""; $("solTools").hidden = true; $("practice").hidden = true; $("follow").hidden = true; $("solCost").textContent = "";
+  const t0 = Date.now(); let phase = "Soruyu okuyorum...";
+  setStatus(true, phase);
+  const timer = setInterval(() => { const s = Math.round((Date.now() - t0) / 1000); $("solStatusText").textContent = `${phase} (${s} sn)`; }, 1000);
+  let lastRender = 0;
+  ctl = new AbortController();
+  try {
+    const out = await streamClaude({
+      system: SYSTEM, signal: ctl.signal,
+      messages: [{ role: "user", content: buildUserContent(state.images, note, state.myAnswer) }],
+      onPhase: () => { phase = "Düşünüyorum, soruyu dikkatle çözüyorum..."; },
+      onText: (full) => {
+        const ph = partialHtml(full);
+        if (ph === null) { phase = "Çözümü hazırlıyorum..."; return; }
+        phase = "Çözümü yazıyorum...";
+        const now = Date.now(); if (now - lastRender < 500) return; lastRender = now;
+        $("paper").hidden = false; $("paper").innerHTML = sanitize(ph);
+      }
+    });
+    clearInterval(timer); setStatus(false);
+    const { meta, html } = parseOutput(out.text);
+    rec.raw = out.text; rec.meta = meta; rec.html = html; rec.cost = costOf(state.model, out.inTok, out.outTok);
+    addCost(rec.cost);
+    rec.thumb = await thumbOf(rec.images[0]).catch(() => rec.images[0]);
+    renderSolution(rec);
+    if (out.stop === "max_tokens") toast("Çözüm çok uzun olduğu için sonu kesilmiş olabilir.", 4000);
+    if (meta && meta.status === "unclear") toast("Fotoğrafın bir kısmı okunamadı; daha net bir fotoğrafla tekrar dene.", 4500);
+    await dbPut(rec).catch(() => toast("Arşive kaydedilemedi (telefon hafızası dolu olabilir)."));
+    state.images = []; state.myAnswer = null; $("note").value = ""; renderThumbs(); [...$("myAnswer").children].forEach(b => b.classList.remove("on"));
+  } catch (e) {
+    clearInterval(timer); setStatus(false);
+    const msg = apiErrorText(e);
+    if (msg) { $("paper").hidden = false; $("paper").innerHTML = `<p>${msg}</p>`; }
+    $("solTools").hidden = false; $("btnSpeak").hidden = true; $("btnShare").hidden = true; $("btnRetry").hidden = false;
+  } finally { state.busy = false; ctl = null; }
+}
+
+async function followUp() {
+  const rec = state.current; const q = $("fInput").value.trim();
+  if (!rec || !q || state.busy) return;
+  state.busy = true; $("fSend").disabled = true; $("fStatus").hidden = false;
+  const imgs = rec.images.map(u => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: u.split(",")[1] } }));
+  const messages = [
+    { role: "user", content: [...imgs, { type: "text", text: "Çözemediğim soru fotoğrafta." + (rec.note ? `\nNotum: ${rec.note}` : "") + (rec.myAnswer ? `\nBenim cevabım: ${rec.myAnswer}` : "") }] },
+    { role: "assistant", content: rec.raw || rec.html }
+  ];
+  for (const f of rec.followups || []) { messages.push({ role: "user", content: f.q }); messages.push({ role: "assistant", content: f.raw || f.html }); }
+  messages.push({ role: "user", content: `Bu kısmı anlamadım: ${q}\n\nSadece takıldığım yere odaklan; aynı anlatım kurallarıyla, kısa ama adım adım, gerekiyorsa şekilli (SVG) ve LaTeX'li açıkla. Yalnızca <<<HTML ... HTML>>> bloğu yaz, META yazma.` });
+  try {
+    const out = await streamClaude({ system: SYSTEM, messages, maxTokens: 16000 });
+    const html = parseOutput(out.text).html || out.text;
+    const cost = costOf(state.model, out.inTok, out.outTok); addCost(cost);
+    rec.followups = rec.followups || []; rec.followups.push({ q, html, raw: out.text, cost });
+    rec.cost = (rec.cost || 0) + cost;
+    renderFollowups(rec); $("fInput").value = "";
+    $("solCost").textContent = `${MODEL_NAMES[rec.model] || rec.model} · bu soru için toplam yaklaşık ${fmtUsd(rec.cost)}`;
+    await dbPut(rec).catch(() => {});
+  } catch (e) { const m = apiErrorText(e); if (m) toast(m, 4000); }
+  finally { state.busy = false; $("fSend").disabled = false; $("fStatus").hidden = true; }
+}
+
+/* ---------------- Sesli anlatım (Arkadaşım'ın ses ayarlarıyla) ---------------- */
+const synth = window.speechSynthesis; const audioEl = new Audio();
+let speakGen = 0, speaking = false;
+function voiceCfg() {
+  return { engine: lsGet("bd_engine", "phone"), azKey: lsGet("bd_azKey", ""), azRegion: lsGet("bd_azRegion", "swedencentral"), azVoice: lsGet("bd_azVoice", "tr-TR-EmelNeural"), rate: parseFloat(lsGet("bd_rate", "0.95")) || 0.95, pitch: parseInt(lsGet("bd_pitch", "0"), 10) || 0, voiceName: lsGet("bd_voice", "") };
+}
+const xmlEsc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+async function azureAudio(text, c) {
+  const multi = !/^tr-TR-/.test(c.azVoice); const rate = Math.round((c.rate - 1) * 100);
+  const inner = `<prosody rate="${rate >= 0 ? "+" : ""}${rate}%" pitch="${c.pitch >= 0 ? "+" : ""}${c.pitch}%">${xmlEsc(text)}</prosody>`;
+  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR"><voice name="${xmlEsc(c.azVoice)}">${multi ? `<lang xml:lang="tr-TR">${inner}</lang>` : inner}</voice></speak>`;
+  const r = await fetch(`https://${c.azRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, { method: "POST", headers: { "Ocp-Apim-Subscription-Key": c.azKey, "Content-Type": "application/ssml+xml", "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3" }, body: ssml });
+  if (!r.ok) throw new Error("Azure " + r.status);
+  return URL.createObjectURL(await r.blob());
+}
+function phoneSpeak(text, c, gen) {
+  return new Promise(res => {
+    if (!synth || gen !== speakGen) return res();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = synth.getVoices().find(x => x.name === c.voiceName) || synth.getVoices().find(x => /^tr/i.test(x.lang));
+    if (v) u.voice = v; u.lang = v ? v.lang : "tr-TR"; u.rate = c.rate; u.pitch = Math.max(0.1, 1 + c.pitch / 50);
+    u.onend = u.onerror = () => res(); synth.speak(u);
+  });
+}
+function playUrl(url, gen) {
+  return new Promise(res => {
+    if (gen !== speakGen) return res();
+    audioEl.onended = audioEl.onerror = () => { URL.revokeObjectURL(url); res(); };
+    audioEl.src = url; audioEl.play().catch(() => res());
+  });
+}
+async function speak(text) {
+  stopSpeak(); const gen = ++speakGen; speaking = true; $("btnSpeak").textContent = "⏹ Durdur";
+  const c = voiceCfg(); const useAz = c.engine === "azure" && c.azKey;
+  const parts = text.replace(/\s+/g, " ").match(/[^.!?…]+[.!?…]*/g) || [text];
+  const chunks = []; let cur = ""; for (const p of parts) { if ((cur + p).length > 380) { if (cur) chunks.push(cur); cur = p; } else cur += p; } if (cur.trim()) chunks.push(cur);
+  let next = useAz ? azureAudio(chunks[0], c).catch(() => null) : null;
+  for (let i = 0; i < chunks.length && gen === speakGen; i++) {
+    if (useAz) {
+      const url = await next; next = i + 1 < chunks.length ? azureAudio(chunks[i + 1], c).catch(() => null) : null;
+      if (url) await playUrl(url, gen); else await phoneSpeak(chunks[i], c, gen);
+    } else await phoneSpeak(chunks[i], c, gen);
+  }
+  if (gen === speakGen) { speaking = false; $("btnSpeak").textContent = "🔊 Sesli anlat"; }
+}
+function stopSpeak() { speakGen++; speaking = false; try { synth && synth.cancel(); audioEl.pause(); } catch {} $("btnSpeak").textContent = "🔊 Sesli anlat"; }
+function narrationOf(rec) {
+  if (rec.meta && rec.meta.narration) return rec.meta.narration;
+  const d = document.createElement("div"); d.innerHTML = sanitize(rec.html); d.querySelectorAll("svg, table, .katex").forEach(n => n.remove());
+  return d.textContent.slice(0, 1500);
+}
+
+/* ---------------- Paylaş (tek dosyalık çözüm sayfası) ---------------- */
+function standaloneHtml(rec) {
+  const paper = $("paper").cloneNode(true);
+  const follow = (rec.followups || []).map(f => `<p class="fq">Soru: ${xmlEsc(f.q)}</p><div class="paper">${$("fList").querySelectorAll(".paper")[rec.followups.indexOf(f)]?.innerHTML || ""}</div>`).join("");
+  const css = [...document.styleSheets].map(s => { try { return [...s.cssRules].map(r => r.cssText).join("\n"); } catch { return ""; } }).join("\n");
+  const imgs = rec.images.map(u => `<img src="${u}" style="max-width:100%;border-radius:12px;margin:6px 0">`).join("");
+  const title = rec.meta ? `${rec.meta.subject || ""} · ${rec.meta.topic || ""}` : "LGS sorusu";
+  const date = new Date(rec.ts).toLocaleString("tr-TR");
+  return `<!doctype html><html lang="tr" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${xmlEsc(title)}</title><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css"><style>${css}\nbody{display:block;padding:16px;max-width:820px;margin:0 auto}</style></head><body><h2>LGS Koçum · ${xmlEsc(title)}</h2><p class="small">${date}${rec.note ? " · Not: " + xmlEsc(rec.note) : ""}</p>${imgs}<div class="paper">${paper.innerHTML}</div>${follow}</body></html>`;
+}
+async function share() {
+  const rec = state.current; if (!rec) return;
+  const html = standaloneHtml(rec);
+  const name = `LGS_${(rec.meta?.subject || "Soru").replace(/[^\wçğıöşüÇĞİÖŞÜ]+/g, "-")}_${new Date(rec.ts).toISOString().slice(0, 10)}.html`;
+  const file = new File([html], name, { type: "text/html" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: "LGS çözümü", text: `${rec.meta?.subject || ""} – ${rec.meta?.topic || ""}` }); return; }
+  } catch (e) { if (e.name === "AbortError") return; }
+  const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000); toast("Çözüm dosyası indirildi; WhatsApp'tan belge olarak gönderebilirsin.", 4000);
+}
+
+/* ---------------- Arşiv görünümü ---------------- */
+let arcFilter = "Tümü";
+async function openArchive() {
+  stopSpeak(); show("vArc");
+  const all = await dbAll().catch(() => []);
+  const subjects = ["Tümü", ...new Set(all.map(r => r.meta?.subject).filter(Boolean))];
+  const f = $("filters"); f.innerHTML = "";
+  for (const s of subjects) { const b = document.createElement("button"); b.className = "pill" + (s === arcFilter ? " on" : ""); b.textContent = s; b.onclick = () => { arcFilter = s; openArchive(); }; f.appendChild(b); }
+  const list = $("arcList"); list.innerHTML = "";
+  const items = all.filter(r => arcFilter === "Tümü" || r.meta?.subject === arcFilter);
+  if (!items.length) { list.innerHTML = `<div class="empty">Henüz kayıtlı çözüm yok. İlk sorunu çektiğinde burada görünecek.</div>`; return; }
+  for (const r of items) {
+    const b = document.createElement("button"); b.className = "item";
+    const img = document.createElement("img"); img.src = r.thumb || r.images[0]; img.alt = "";
+    const d = document.createElement("div");
+    const t = document.createElement("div"); t.className = "t"; t.textContent = r.meta?.topic || "Soru";
+    const m = document.createElement("div"); m.className = "m";
+    m.textContent = `${r.meta?.subject || "?"} · ${new Date(r.ts).toLocaleDateString("tr-TR")}${r.practiceTry ? (r.practiceTry.right ? " · Kendin dene ✔" : " · Kendin dene ✘") : ""}${r.followups?.length ? ` · ${r.followups.length} takip sorusu` : ""}`;
+    d.append(t, m); b.append(img, d);
+    b.onclick = () => { state.current = r; show("vSol"); $("btnSpeak").hidden = false; $("btnShare").hidden = false; renderSolution(r); addDelete(r); };
+    list.appendChild(b);
+  }
+}
+function addDelete(r) {
+  let box = $("delBox");
+  if (!box) { box = document.createElement("div"); box.id = "delBox"; $("vSol").appendChild(box); }
+  box.innerHTML = `<button class="btn" id="delAsk">Bu çözümü arşivden sil</button><div class="confirm" id="delConf" hidden>Silinsin mi? <button class="btn" id="delYes">Evet, sil</button> <button class="btn" id="delNo">Vazgeç</button></div>`;
+  $("delAsk").onclick = () => $("delConf").hidden = false;
+  $("delNo").onclick = () => $("delConf").hidden = true;
+  $("delYes").onclick = async () => { await dbDel(r.id).catch(() => {}); toast("Silindi."); openArchive(); };
+}
+
+/* ---------------- Ayarlar ---------------- */
+function openSettings() {
+  $("apiKey").value = state.apiKey; $("model").value = state.model;
+  $("monthCost").textContent = fmtUsd(parseFloat(lsGet(monthKey(), "0")) || 0);
+  $("sheet").classList.add("open");
+}
+$("btnSaveSet").onclick = () => {
+  state.apiKey = $("apiKey").value.trim(); lsSet("bd_apiKey", state.apiKey);
+  state.model = $("model").value; lsSet("lk_model", state.model);
+  updateModelNote(); $("sheet").classList.remove("open"); toast("Kaydedildi.");
+};
+$("sheet").addEventListener("click", (e) => { if (e.target === $("sheet")) $("sheet").classList.remove("open"); });
+
+/* ---------------- Olaylar ---------------- */
+$("btnCam").onclick = () => $("fileCam").click();
+$("btnGal").onclick = () => $("fileGal").click();
+$("fileCam").onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+$("fileGal").onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+$("myAnswer").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const on = !b.classList.contains("on");
+  [...$("myAnswer").children].forEach(x => x.classList.remove("on"));
+  if (on) { b.classList.add("on"); state.myAnswer = b.dataset.v; } else state.myAnswer = null;
+});
+$("btnSolve").onclick = solve;
+$("btnRetry").onclick = () => { if (state.current) { state.images = state.current.images.map(u => ({ url: u, data: u.split(",")[1] })); $("note").value = state.current.note || ""; state.myAnswer = state.current.myAnswer; $("btnSpeak").hidden = false; $("btnShare").hidden = false; solve(); } };
+$("btnSpeak").onclick = () => { if (speaking) stopSpeak(); else if (state.current) speak(narrationOf(state.current)); };
+$("btnShare").onclick = share;
+$("fSend").onclick = followUp;
+$("btnArchive").onclick = openArchive;
+$("btnSettings").onclick = openSettings;
+$("btnNew").onclick = () => { if (ctl) ctl.abort(); stopSpeak(); $("btnSpeak").hidden = false; $("btnShare").hidden = false; show("vNew"); };
+document.addEventListener("visibilitychange", () => { if (document.hidden) stopSpeak(); });
+
+/* ---------------- Uygulama olarak yükleme ---------------- */
+let installEvt = null;
+window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); installEvt = e; $("btnInstall").hidden = false; });
+$("btnInstall").onclick = async () => { if (!installEvt) return; installEvt.prompt(); try { await installEvt.userChoice; } catch {} installEvt = null; $("btnInstall").hidden = true; };
+window.addEventListener("appinstalled", () => { $("btnInstall").hidden = true; toast("Yüklendi; ana ekranda 'LGS Koçum' simgesi var.", 3500); });
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+
+/* ---------------- Başlangıç ---------------- */
+updateModelNote(); renderThumbs(); show("vNew");
+if (!state.apiKey) toast("Başlamak için ayarlardan API anahtarını girin.", 3500);
+})();
+</script>
+</body>
+</html>
