@@ -189,13 +189,54 @@ textarea { min-height: 220px; line-height: 1.45; }
 
     <h3>Ses</h3>
     <div class="field">
-      <label for="voice">Okuma sesi</label>
+      <label for="ttsEngine">Ses kaynağı</label>
+      <select id="ttsEngine">
+        <option value="azure">Doğal yapay zekâ sesi (Microsoft Azure)</option>
+        <option value="phone">Telefonun kendi sesi</option>
+      </select>
+    </div>
+    <div id="azureBox">
+      <div class="field">
+        <label for="azureKey">Azure Speech anahtarı (KEY 1)</label>
+        <input type="password" id="azureKey" autocomplete="off" placeholder="32 karakterlik anahtar">
+      </div>
+      <div class="field">
+        <label for="azureRegion">Azure bölgesi (Location/Region)</label>
+        <select id="azureRegion">
+          <option value="westeurope">West Europe (westeurope)</option>
+          <option value="northeurope">North Europe (northeurope)</option>
+          <option value="germanywestcentral">Germany West Central</option>
+          <option value="swedencentral">Sweden Central</option>
+          <option value="francecentral">France Central</option>
+          <option value="uksouth">UK South</option>
+          <option value="italynorth">Italy North</option>
+          <option value="eastus">East US</option>
+          <option value="eastus2">East US 2</option>
+          <option value="westus2">West US 2</option>
+          <option value="centralindia">Central India</option>
+          <option value="southeastasia">Southeast Asia</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="azureVoice">Doğal ses</label>
+        <select id="azureVoice"><option value="tr-TR-EmelNeural">Emel (kadın, Türkçe)</option></select>
+        <div class="row" style="margin-top:6px"><button class="btn" id="btnFetchVoices">Tüm Türkçe sesleri getir</button></div>
+        <span class="small" id="azureNote">Anahtar ve bölgeyi girip "Tüm Türkçe sesleri getir"e dokunun; Türkçe konuşabilen bütün kadın ve erkek sesler listelenir. Her birini "Sesi dene" ile dinleyebilirsiniz.</span>
+      </div>
+    </div>
+    <div class="field" id="phoneVoiceBox">
+      <label for="voice">Telefonun okuma sesi (yedek)</label>
       <select id="voice"></select>
       <span class="small" id="voiceNote">Türkçe sesler listenin başında. Telefonda yeni bir Türkçe ses yüklemek için: Ayarlar → Erişilebilirlik → Metin okuma (Android) veya Ayarlar → Erişilebilirlik → Seslendirilen İçerik → Sesler → Türkçe (iPhone).</span>
     </div>
     <div class="field">
       <label for="rate">Konuşma hızı: <span id="rateVal">0.95</span></label>
       <input type="range" id="rate" min="0.7" max="1.3" step="0.05" value="0.95">
+    </div>
+    <div class="field">
+      <label for="pitch">Ses tonu (incelik): <span id="pitchVal">0</span></label>
+      <input type="range" id="pitch" min="-20" max="15" step="1" value="0">
+      <span class="small">Sola: daha tok ve sakin · Sağa: daha ince</span>
     </div>
     <div class="row"><button class="btn" id="btnTestVoice">Sesi dene</button></div>
 
@@ -254,7 +295,8 @@ textarea { min-height: 220px; line-height: 1.45; }
 /* ---------- Sabitler ---------- */
 const LS = {
   key: "bd_apiKey", model: "bd_model", voice: "bd_voice", rate: "bd_rate", auto: "bd_auto", text: "bd_text",
-  name: "bd_aiName", defter: "bd_defter", gunluk: "bd_gunluk", turns: "bd_turns", turnsSince: "bd_turnsSince"
+  name: "bd_aiName", defter: "bd_defter", gunluk: "bd_gunluk", turns: "bd_turns", turnsSince: "bd_turnsSince",
+  engine: "bd_engine", azKey: "bd_azKey", azRegion: "bd_azRegion", azVoice: "bd_azVoice", azVoices: "bd_azVoices", pitch: "bd_pitch"
 };
 const API_URL = "https://api.anthropic.com/v1/messages";
 const MAX_TURNS = 24;          // modele gönderilen son tur sayısı
@@ -419,6 +461,12 @@ const state = {
   gunluk: lsGet(LS.gunluk, ""),
   turns: (() => { try { return JSON.parse(lsGet(LS.turns, "[]")); } catch { return []; } })(),
   turnsSince: parseInt(lsGet(LS.turnsSince, "0"), 10) || 0,
+  engine: lsGet(LS.engine, "azure"),
+  azKey: lsGet(LS.azKey, ""),
+  azRegion: lsGet(LS.azRegion, "westeurope"),
+  azVoice: lsGet(LS.azVoice, "tr-TR-EmelNeural"),
+  azVoices: (() => { try { return JSON.parse(lsGet(LS.azVoices, "[]")); } catch { return []; } })(),
+  pitch: parseInt(lsGet(LS.pitch, "0"), 10) || 0,
   busy: false,
   listening: false,
   speaking: false,
@@ -480,26 +528,101 @@ if (synth) { loadVoices(); synth.onvoiceschanged = loadVoices; }
 
 function pickVoice() { return voices.find(v => v.name === state.voiceName) || voices.find(v => /^tr/i.test(v.lang)) || null; }
 
-// Cümle cümle okuma: Chrome'un uzun metinleri kesme sorununu da önler.
+/* --- Azure doğal ses --- */
+const audioEl = new Audio(); audioEl.preload = "auto";
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+let azureWarned = false;
+const useAzure = () => state.engine === "azure" && state.azKey && state.azRegion;
+const xmlEsc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&apos;");
+function buildSSML(text) {
+  const v = state.azVoice || "tr-TR-EmelNeural";
+  const multi = !/^tr-TR-/.test(v);
+  const rate = Math.round((state.rate - 1) * 100);
+  const pitch = state.pitch;
+  const inner = `<prosody rate="${rate >= 0 ? "+" : ""}${rate}%" pitch="${pitch >= 0 ? "+" : ""}${pitch}%">${xmlEsc(text)}</prosody>`;
+  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR"><voice name="${xmlEsc(v)}">${multi ? `<lang xml:lang="tr-TR">${inner}</lang>` : inner}</voice></speak>`;
+}
+async function azureAudio(text) {
+  const r = await fetch(`https://${state.azRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
+    method: "POST",
+    headers: { "Ocp-Apim-Subscription-Key": state.azKey, "Content-Type": "application/ssml+xml", "X-Microsoft-OutputFormat": "audio-24khz-48kbitrate-mono-mp3" },
+    body: buildSSML(text)
+  });
+  if (!r.ok) { const e = new Error("Azure " + r.status); e.status = r.status; throw e; }
+  return URL.createObjectURL(await r.blob());
+}
+function azureErrorText(e) {
+  if (e.status === 401) return "Azure anahtarı veya bölgesi hatalı; telefonun sesiyle devam ediyorum.";
+  if (e.status === 429) return "Azure'un ücretsiz ses kotası doldu; telefonun sesiyle devam ediyorum.";
+  return "Doğal sese ulaşılamadı; telefonun sesiyle devam ediyorum.";
+}
+async function fetchAzureVoices(key, region) {
+  const r = await fetch(`https://${region}.tts.speech.microsoft.com/cognitiveservices/voices/list`, { headers: { "Ocp-Apim-Subscription-Key": key } });
+  if (!r.ok) { const e = new Error("Azure " + r.status); e.status = r.status; throw e; }
+  const all = await r.json();
+  const list = all.filter(v => v.Locale === "tr-TR" || (v.SecondaryLocaleList || []).includes("tr-TR"))
+    .map(v => ({ id: v.ShortName, name: v.LocalName || v.DisplayName, female: v.Gender === "Female", tr: v.Locale === "tr-TR" }));
+  list.sort((a, b) => (b.tr - a.tr) || (b.female - a.female) || a.name.localeCompare(b.name));
+  return list;
+}
+function renderAzureVoices() {
+  const sel = $("azureVoice"); sel.innerHTML = "";
+  const list = state.azVoices.length ? state.azVoices : [{ id: "tr-TR-EmelNeural", name: "Emel", female: true, tr: true }];
+  for (const v of list) {
+    const o = document.createElement("option"); o.value = v.id;
+    o.textContent = `${v.name} (${v.female ? "kadın" : "erkek"}, ${v.tr ? "Türkçe" : "çok dilli"})`;
+    sel.appendChild(o);
+  }
+  sel.value = list.some(v => v.id === state.azVoice) ? state.azVoice : list[0].id;
+}
+function updateEngineUI() { $("azureBox").hidden = $("ttsEngine").value !== "azure"; }
+
+// Cümle cümle okuma kuyruğu (Azure'da bir sonraki cümle önceden hazırlanır).
 const speakQueue = [];
 let speakingNow = false;
 let speechDone = null; // tüm kuyruk bitince çözülür
+let speechGen = 0;     // durdurulunca eski kuyruğu geçersiz kılar
 function enqueueSpeech(text) {
   const t = cleanForSpeech(text); if (!t) return;
-  speakQueue.push(t); pumpSpeech();
+  const item = { text: t };
+  if (useAzure()) { item.audio = azureAudio(t); item.audio.catch(() => {}); }
+  speakQueue.push(item); pumpSpeech();
+}
+function finishItem(gen) { if (gen !== speechGen) return; speakingNow = false; pumpSpeech(); }
+function speakWithPhone(text, gen) {
+  if (!synth) { finishItem(gen); return; }
+  const u = new SpeechSynthesisUtterance(text);
+  const v = pickVoice(); if (v) u.voice = v;
+  u.lang = v ? v.lang : "tr-TR"; u.rate = state.rate; u.pitch = Math.max(0.1, 1 + state.pitch / 50);
+  u.onend = u.onerror = () => finishItem(gen);
+  synth.speak(u);
 }
 function pumpSpeech() {
-  if (speakingNow || !synth) return;
+  if (speakingNow) return;
   const next = speakQueue.shift();
   if (next === undefined) { state.speaking = false; if (speechDone) { const d = speechDone; speechDone = null; d(); } return; }
   speakingNow = true; state.speaking = true; setMic("speaking");
-  const u = new SpeechSynthesisUtterance(next);
-  const v = pickVoice(); if (v) u.voice = v;
-  u.lang = v ? v.lang : "tr-TR"; u.rate = state.rate; u.pitch = 1.0;
-  u.onend = u.onerror = () => { speakingNow = false; pumpSpeech(); };
-  synth.speak(u);
+  const gen = speechGen;
+  if (next.audio) {
+    next.audio.then(url => {
+      if (gen !== speechGen) { URL.revokeObjectURL(url); return; }
+      audioEl.onended = audioEl.onerror = () => { URL.revokeObjectURL(url); finishItem(gen); };
+      audioEl.src = url;
+      audioEl.play().catch(() => { URL.revokeObjectURL(url); speakWithPhone(next.text, gen); });
+    }).catch(e => {
+      if (gen !== speechGen) return;
+      if (!azureWarned) { azureWarned = true; toast(azureErrorText(e), 3500); }
+      speakWithPhone(next.text, gen);
+    });
+  } else speakWithPhone(next.text, gen);
 }
-function stopSpeaking() { speakQueue.length = 0; if (synth) synth.cancel(); speakingNow = false; state.speaking = false; if (speechDone) { const d = speechDone; speechDone = null; d(); } }
+function stopSpeaking() {
+  speechGen++; speakQueue.length = 0;
+  if (synth) synth.cancel();
+  try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
+  speakingNow = false; state.speaking = false;
+  if (speechDone) { const d = speechDone; speechDone = null; d(); }
+}
 function waitSpeech() { return new Promise(res => { if (!speakingNow && speakQueue.length === 0) res(); else speechDone = res; }); }
 
 /* ---------- Ses: dinleme ---------- */
@@ -643,6 +766,9 @@ function openSettings() {
   $("apiKey").value = state.apiKey; $("model").value = state.model; $("aiName").value = state.aiName;
   $("rate").value = state.rate; $("rateVal").textContent = state.rate.toFixed(2);
   $("voice").value = state.voiceName;
+  $("ttsEngine").value = state.engine; $("azureKey").value = state.azKey; $("azureRegion").value = state.azRegion;
+  $("pitch").value = state.pitch; $("pitchVal").textContent = state.pitch;
+  renderAzureVoices(); updateEngineUI();
   $("sheetSettings").classList.add("open");
 }
 function closeSettings() { $("sheetSettings").classList.remove("open"); }
@@ -653,7 +779,11 @@ function exportText() { return `${state.defter}\n\n---\n\n# Konuşma Günlüğü
 /* ---------- Olaylar ---------- */
 let synthUnlocked = false;
 $("mic").addEventListener("click", () => {
-  if (synth && !synthUnlocked) { synthUnlocked = true; try { synth.speak(new SpeechSynthesisUtterance(" ")); } catch {} }
+  if (!synthUnlocked) {
+    synthUnlocked = true;
+    try { if (synth) synth.speak(new SpeechSynthesisUtterance(" ")); } catch {}
+    try { audioEl.src = SILENT; audioEl.play().catch(() => {}); } catch {}
+  }
   if (state.listening) { stopListening(); return; }
   if (state.speaking) { stopSpeaking(); }
   if (state.busy && state.abort) { state.abort.abort(); return; }
@@ -667,15 +797,35 @@ $("btnSettings").addEventListener("click", openSettings);
 $("btnDefter").addEventListener("click", openDefter);
 $("btnCloseDefter").addEventListener("click", closeDefter);
 $("rate").addEventListener("input", (e) => { $("rateVal").textContent = parseFloat(e.target.value).toFixed(2); });
+function readVoiceForm() {
+  state.voiceName = $("voice").value; state.rate = parseFloat($("rate").value); state.pitch = parseInt($("pitch").value, 10) || 0;
+  state.engine = $("ttsEngine").value; state.azKey = $("azureKey").value.trim(); state.azRegion = $("azureRegion").value; state.azVoice = $("azureVoice").value;
+}
 $("btnTestVoice").addEventListener("click", () => {
-  state.voiceName = $("voice").value; state.rate = parseFloat($("rate").value);
+  try { audioEl.src = SILENT; audioEl.play().catch(() => {}); } catch {}
+  readVoiceForm(); azureWarned = false;
   stopSpeaking(); enqueueSpeech("Merhaba Beyza. Ben senin konuşma arkadaşınım. Sesim böyle; beğendin mi?");
+});
+$("pitch").addEventListener("input", (e) => { $("pitchVal").textContent = e.target.value; });
+$("ttsEngine").addEventListener("change", updateEngineUI);
+$("btnFetchVoices").addEventListener("click", async () => {
+  const key = $("azureKey").value.trim(), region = $("azureRegion").value;
+  if (!key) { toast("Önce Azure anahtarını girin."); return; }
+  $("azureNote").textContent = "Sesler getiriliyor...";
+  try {
+    state.azVoices = await fetchAzureVoices(key, region); lsSet(LS.azVoices, JSON.stringify(state.azVoices));
+    renderAzureVoices();
+    $("azureNote").textContent = `${state.azVoices.length} ses bulundu. Birini seçip "Sesi dene"ye dokunun.`;
+  } catch (e) {
+    $("azureNote").textContent = e.status === 401 ? "Anahtar ya da bölge hatalı. Azure'daki 'Location/Region' değerini kontrol edin." : "Sesler getirilemedi: " + (e.status ? "Azure " + e.status : "bağlantı hatası");
+  }
 });
 $("btnSaveSettings").addEventListener("click", () => {
   state.apiKey = $("apiKey").value.trim(); lsSet(LS.key, state.apiKey);
   state.model = $("model").value; lsSet(LS.model, state.model);
-  state.voiceName = $("voice").value; lsSet(LS.voice, state.voiceName);
-  state.rate = parseFloat($("rate").value); lsSet(LS.rate, String(state.rate));
+  readVoiceForm(); azureWarned = false;
+  lsSet(LS.voice, state.voiceName); lsSet(LS.rate, String(state.rate)); lsSet(LS.pitch, String(state.pitch));
+  lsSet(LS.engine, state.engine); lsSet(LS.azKey, state.azKey); lsSet(LS.azRegion, state.azRegion); lsSet(LS.azVoice, state.azVoice);
   state.aiName = $("aiName").value.trim(); lsSet(LS.name, state.aiName);
   state.auto = $("optAuto").checked; lsSet(LS.auto, state.auto ? "1" : "0");
   state.showText = $("optText").checked; lsSet(LS.text, state.showText ? "1" : "0");
