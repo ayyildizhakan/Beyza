@@ -550,7 +550,8 @@ function buildSSML(text) {
   const rate = Math.round((state.rate - 1) * 100);
   const pitch = state.pitch;
   const inner = `<prosody rate="${rate >= 0 ? "+" : ""}${rate}%" pitch="${pitch >= 0 ? "+" : ""}${pitch}%">${xmlEsc(text)}</prosody>`;
-  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR"><voice name="${xmlEsc(v)}">${multi ? `<lang xml:lang="tr-TR">${inner}</lang>` : inner}</voice></speak>`;
+  const body = `<break time="150ms"/>${inner}<break time="350ms"/>`;
+  return `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="tr-TR"><voice name="${xmlEsc(v)}">${multi ? `<lang xml:lang="tr-TR">${body}</lang>` : body}</voice></speak>`;
 }
 async function azureAudio(text) {
   const r = await fetch(`https://${state.azRegion}.tts.speech.microsoft.com/cognitiveservices/v1`, {
@@ -559,7 +560,47 @@ async function azureAudio(text) {
     body: buildSSML(text)
   });
   if (!r.ok) { const e = new Error("Azure " + r.status); e.status = r.status; throw e; }
-  return URL.createObjectURL(await r.blob());
+  return await r.arrayBuffer();
+}
+/* Web Audio: Android'de <audio> öğesi, ses tanıma servisi ses odağını aldığında
+   yarıda duraklatılıyor ("mer..." deyip susma). AudioContext bu duraklatmadan etkilenmez. */
+let actx = null, curSrc = null;
+function getCtx() {
+  if (!actx) { const C = window.AudioContext || window.webkitAudioContext; if (C) { try { actx = new C(); } catch { actx = null; } } }
+  return actx;
+}
+function unlockAudio() {
+  const c = getCtx();
+  if (c) { try { c.resume(); const b = c.createBuffer(1, 1, 22050); const n = c.createBufferSource(); n.buffer = b; n.connect(c.destination); n.start(0); } catch {} }
+  try { audioEl.src = SILENT; audioEl.play().catch(() => {}); } catch {}
+}
+async function playBuffer(arrBuf, gen) {
+  const c = getCtx(); if (!c) throw new Error("no-ctx");
+  if (c.state !== "running") { try { await c.resume(); } catch {} }
+  if (c.state !== "running") throw new Error("ctx-suspended");
+  const buf = await c.decodeAudioData(arrBuf.slice(0));
+  if (gen !== speechGen) return;
+  const n = c.createBufferSource(); n.buffer = buf; n.connect(c.destination);
+  curSrc = n;
+  let done = false;
+  const fin = () => { if (done) return; done = true; clearTimeout(guard); if (curSrc === n) curSrc = null; finishItem(gen); };
+  n.onended = fin;
+  const guard = setTimeout(fin, (buf.duration + 3) * 1000); // onended gelmezse takılma
+  n.start(c.currentTime + 0.08);
+}
+function playWithElement(arrBuf, text, gen) {
+  const url = URL.createObjectURL(new Blob([arrBuf], { type: "audio/mpeg" }));
+  let done = false, retries = 0;
+  const fin = () => { if (done) return; done = true; URL.revokeObjectURL(url); audioEl.onpause = null; finishItem(gen); };
+  audioEl.onended = fin;
+  audioEl.onerror = () => { if (done) return; done = true; URL.revokeObjectURL(url); audioEl.onpause = null; speakWithPhone(text, gen); };
+  // Beklenmedik duraklatma (ses odağı kaybı) olursa kaldığı yerden sürdür.
+  audioEl.onpause = () => {
+    if (done || gen !== speechGen || audioEl.ended) return;
+    if (retries++ < 3) setTimeout(() => { if (!done && gen === speechGen) audioEl.play().catch(fin); }, 250); else fin();
+  };
+  audioEl.src = url;
+  audioEl.play().catch(() => { if (done) return; done = true; URL.revokeObjectURL(url); audioEl.onpause = null; speakWithPhone(text, gen); });
 }
 function azureErrorText(e) {
   if (e.status === 401) return "Azure anahtarı veya bölgesi hatalı; telefonun sesiyle devam ediyorum.";
@@ -604,7 +645,16 @@ function speakWithPhone(text, gen) {
   const u = new SpeechSynthesisUtterance(text);
   const v = pickVoice(); if (v) u.voice = v;
   u.lang = v ? v.lang : "tr-TR"; u.rate = state.rate; u.pitch = Math.max(0.1, 1 + state.pitch / 50);
-  u.onend = u.onerror = () => finishItem(gen);
+  let done = false, started = false, idle = 0;
+  const fin = () => { if (done) return; done = true; clearInterval(watch); finishItem(gen); };
+  u.onstart = () => { started = true; };
+  u.onend = u.onerror = fin;
+  // Chrome/Android bazen onend göndermez ya da konuşmayı duraklatır: denetle.
+  const watch = setInterval(() => {
+    if (done || gen !== speechGen) { clearInterval(watch); return; }
+    if (synth.paused) { try { synth.resume(); } catch {} }
+    if (!synth.speaking && !synth.pending) { if (++idle >= (started ? 3 : 10)) fin(); } else idle = 0;
+  }, 400);
   synth.speak(u);
 }
 function pumpSpeech() {
@@ -614,12 +664,10 @@ function pumpSpeech() {
   speakingNow = true; state.speaking = true; setMic("speaking");
   const gen = speechGen;
   if (next.audio) {
-    next.audio.then(url => {
-      if (gen !== speechGen) { URL.revokeObjectURL(url); return; }
-      audioEl.onended = audioEl.onerror = () => { URL.revokeObjectURL(url); finishItem(gen); };
-      audioEl.src = url;
-      audioEl.play().catch(() => { URL.revokeObjectURL(url); speakWithPhone(next.text, gen); });
-    }).catch(e => {
+    next.audio.then(data => {
+      if (gen !== speechGen) return;
+      playBuffer(data, gen).catch(() => { if (gen === speechGen) playWithElement(data, next.text, gen); });
+    }, e => {
       if (gen !== speechGen) return;
       if (!azureWarned) { azureWarned = true; toast(azureErrorText(e), 3500); }
       speakWithPhone(next.text, gen);
@@ -629,7 +677,8 @@ function pumpSpeech() {
 function stopSpeaking() {
   speechGen++; speakQueue.length = 0;
   if (synth) synth.cancel();
-  try { audioEl.pause(); audioEl.removeAttribute("src"); audioEl.load(); } catch {}
+  if (curSrc) { try { curSrc.onended = null; curSrc.stop(); } catch {} curSrc = null; }
+  try { audioEl.onpause = null; audioEl.onended = null; audioEl.onerror = null; audioEl.pause(); } catch {}
   speakingNow = false; state.speaking = false;
   if (speechDone) { const d = speechDone; speechDone = null; d(); }
 }
@@ -643,13 +692,15 @@ function startListening() {
   if (state.busy || state.listening) return;
   stopSpeaking();
   rec = new SR(); rec.lang = "tr-TR"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
-  let finalText = "";
+  let finalText = "", lastInterim = "";
+  keepAwake();
   rec.onstart = () => { state.listening = true; setMic("listening"); setStatus("Dinliyorum... bitince düğmeye tekrar dokun veya sus.", true); };
   rec.onresult = (e) => {
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
     }
+    lastInterim = interim;
     setStatus((finalText + " " + interim).trim() || "Dinliyorum...", true);
   };
   rec.onerror = (e) => {
@@ -661,7 +712,7 @@ function startListening() {
   };
   rec.onend = () => {
     state.listening = false; setMic("");
-    const text = finalText.trim();
+    const text = (finalText.trim() || lastInterim.trim());
     if (text) send(text); else if (!$("status").textContent.startsWith("Mikrofon")) setStatus("Hazır");
   };
   try { rec.start(); } catch { setStatus("Dinleme başlatılamadı. Tekrar dene."); }
@@ -713,7 +764,7 @@ function errorText(e) {
 /* ---------- Sohbet akışı ---------- */
 async function send(userText) {
   if (!state.apiKey) { openSettings(); toast("Önce API anahtarını girin."); return; }
-  state.busy = true; setMic("busy"); setStatus("Düşünüyorum...");
+  state.busy = true; setMic("busy"); setStatus("Düşünüyorum..."); keepAwake();
   state.turns.push({ role: "user", content: userText }); addMsg("me", userText);
   const bubble = addMsg("ai", "…");
   const system = systemPrompt(state.defter, state.aiName, isFirstTime());
@@ -738,7 +789,7 @@ async function send(userText) {
     await waitSpeech();
     state.busy = false; setMic(""); setStatus("Hazır");
     if (state.turnsSince >= AUTO_UPDATE_EVERY) updateDefter(true);
-    if (state.auto && !ctl.signal.aborted) setTimeout(() => { if (!state.busy && !state.listening) startListening(); }, 350);
+    if (state.auto && !ctl.signal.aborted) setTimeout(() => { if (!state.busy && !state.listening && !state.speaking) startListening(); }, 900);
   } catch (e) {
     state.busy = false; setMic("");
     const t = errorText(e);
@@ -792,8 +843,8 @@ $("mic").addEventListener("click", () => {
   if (!synthUnlocked) {
     synthUnlocked = true;
     try { if (synth) synth.speak(new SpeechSynthesisUtterance(" ")); } catch {}
-    try { audioEl.src = SILENT; audioEl.play().catch(() => {}); } catch {}
   }
+  unlockAudio(); keepAwake();
   if (state.listening) { stopListening(); return; }
   if (state.speaking) { stopSpeaking(); }
   if (state.busy && state.abort) { state.abort.abort(); return; }
@@ -812,7 +863,7 @@ function readVoiceForm() {
   state.engine = $("ttsEngine").value; state.azKey = $("azureKey").value.trim(); state.azRegion = $("azureRegion").value; state.azVoice = $("azureVoice").value;
 }
 $("btnTestVoice").addEventListener("click", () => {
-  try { audioEl.src = SILENT; audioEl.play().catch(() => {}); } catch {}
+  unlockAudio();
   readVoiceForm(); azureWarned = false;
   stopSpeaking(); enqueueSpeech("Merhaba Beyza. Ben senin konuşma arkadaşınım. Sesim böyle; beğendin mi?");
 });
@@ -866,7 +917,21 @@ $("btnResetYes").addEventListener("click", () => {
   $("defterText").value = state.defter; $("gunlukText").value = "(Henüz giriş yok.)"; $("resetConfirm").hidden = true; toast("Defter sıfırlandı.");
 });
 document.querySelectorAll(".sheet").forEach(s => s.addEventListener("click", (e) => { if (e.target === s) { closeSettings(); closeDefter(); } }));
-document.addEventListener("visibilitychange", () => { if (document.hidden) { stopSpeaking(); stopListening(); } });
+/* Ekran açık kalsın: ekran kararınca sayfa gizlenip konuşma yarıda kesiliyordu. */
+let wakeLock = null, wakeTimer = null;
+async function keepAwake() {
+  clearTimeout(wakeTimer); wakeTimer = setTimeout(releaseAwake, 3 * 60 * 1000);
+  if (wakeLock || !("wakeLock" in navigator) || document.hidden) return;
+  try { wakeLock = await navigator.wakeLock.request("screen"); wakeLock.addEventListener("release", () => { wakeLock = null; }); } catch { wakeLock = null; }
+}
+function releaseAwake() {
+  if (state.busy || state.speaking || state.listening) { wakeTimer = setTimeout(releaseAwake, 60 * 1000); return; }
+  if (wakeLock) { try { wakeLock.release(); } catch {} wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) { stopSpeaking(); stopListening(); }
+  else if (wakeTimer) keepAwake();
+});
 
 /* ---------- Uygulama olarak yükleme (PWA) ---------- */
 let installEvt = null;
