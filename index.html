@@ -192,8 +192,10 @@ textarea { min-height: 220px; line-height: 1.45; }
     <div class="field">
       <label for="model">Model</label>
       <select id="model">
-        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (önerilen)</option>
-        <option value="claude-haiku-5-5">Claude Haiku 5.5 (daha hızlı, daha ucuz)</option>
+        <option value="claude-fable-5-1">Claude Fable 5.1 (en güçlü, en pahalı)</option>
+        <option value="claude-opus-5-5">Claude Opus 5.5 (çok güçlü)</option>
+        <option value="claude-sonnet-5-5">Claude Sonnet 5.5 (dengeli)</option>
+        <option value="claude-haiku-5-5">Claude Haiku 5.5 (en hızlı, en ucuz)</option>
       </select>
     </div>
 
@@ -723,16 +725,12 @@ function startListening() {
 function stopListening() { if (rec && state.listening) { try { rec.stop(); } catch {} } }
 
 /* ---------- Claude API ---------- */
-/* Yeni modellerde "düşünme" varsayılan olarak açık ve düşünme jetonları max_tokens'tan
-   düşülüyor; eskiden 400 jetonluk sınır düşünmeye harcanınca cevap "Mer..." diye yarım kalıyordu.
-   Sohbette ön-düşünmeyi kapatıyoruz ve sınırı geniş tutuyoruz (yalnızca kullanılan jeton ücretlenir). */
-function thinkingOff(model) {
-  if (/^claude-sonnet-5-5/.test(model)) return { type: "between_tools" };
-  if (/^claude-haiku-5-5/.test(model)) return { type: "disabled" };
-  return null;
-}
-async function callClaude(messages, system, { stream = false, onDelta, maxTokens = 2000, signal } = {}) {
-  const think = thinkingOff(state.model);
+/* Düşünme açık ve kısıtsız: model her cevaptan önce gerektiği kadar düşünür (effort: high).
+   Düşünme jetonları max_tokens'tan düşüldüğü için sınır çok geniş tutulur; eskiden 400 jetonluk
+   sınır düşünmeye harcanınca cevap "Mer..." diye yarım kalıyordu. Yalnızca kullanılan jeton ücretlenir. */
+const EFFORT = { output_config: { effort: "high" } };
+async function callClaude(messages, system, { stream = false, onDelta, maxTokens = 32000, signal } = {}) {
+  const think = EFFORT;
   const doFetch = (withThink) => fetch(API_URL, {
     method: "POST", signal,
     headers: {
@@ -741,14 +739,14 @@ async function callClaude(messages, system, { stream = false, onDelta, maxTokens
       "anthropic-version": "2023-06-01",
       "anthropic-dangerous-direct-browser-access": "true"
     },
-    body: JSON.stringify(Object.assign({ model: state.model, max_tokens: maxTokens, system, messages, stream }, withThink && think ? { thinking: think } : {}))
+    body: JSON.stringify(Object.assign({ model: state.model, max_tokens: maxTokens, system, messages, stream }, withThink && think ? think : {}))
   });
   let res = await doFetch(true);
   let failMsg = null;
   if (!res.ok) {
     failMsg = `HTTP ${res.status}`;
     try { const j = await res.json(); failMsg = j.error?.message || failMsg; } catch {}
-    if (res.status === 400 && think && /thinking/i.test(failMsg)) { res = await doFetch(false); failMsg = null; } // ayar reddedilirse ayarsız tekrar dene
+    if (res.status === 400 && think && /effort|output_config/i.test(failMsg)) { res = await doFetch(false); failMsg = null; } // ayar reddedilirse ayarsız tekrar dene
   }
   if (!res.ok) {
     let msg = failMsg || `HTTP ${res.status}`;
@@ -827,7 +825,7 @@ async function updateDefter(silent) {
   const transcript = state.turns.slice(-2 * AUTO_UPDATE_EVERY - 4).map(t => (t.role === "user" ? "Beyza: " : "Arkadaş: ") + t.content).join("\n");
   if (!silent) setStatus("Defteri güncelliyorum...");
   try {
-    const raw = await callClaude([{ role: "user", content: updatePrompt(state.defter, state.gunluk, transcript, today) }], "Yalnızca geçerli JSON döndürürsün.", { maxTokens: 8000 });
+    const raw = await callClaude([{ role: "user", content: updatePrompt(state.defter, state.gunluk, transcript, today) }], "Yalnızca geçerli JSON döndürürsün.", { maxTokens: 32000, stream: true });
     const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
     const j = JSON.parse(raw.slice(s, e + 1));
     if (typeof j.defter === "string" && j.defter.includes("## Öğrenilen kurallar")) { state.defter = j.defter; lsSet(LS.defter, state.defter); }
